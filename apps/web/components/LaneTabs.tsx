@@ -31,7 +31,7 @@ export function LaneTabs({
     if (role.toUpperCase() !== "ALL") params.set("role", role);
     if (extraParams) {
       for (const [key, value] of Object.entries(extraParams)) {
-        if (value && value.toLowerCase() !== "all") params.set(key, value);
+        if (value) params.set(key, value);
       }
     }
     const qs = params.toString();

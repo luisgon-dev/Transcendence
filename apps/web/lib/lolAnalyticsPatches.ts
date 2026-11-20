@@ -21,10 +21,13 @@ export const fetchLolAnalyticsPatches = cache(async (queue?: string | null): Pro
   return res.ok ? (res.body ?? []) : [];
 });
 
-export const fetchPublishedAnalyticsPatches = cache(async (queue?: string | null): Promise<LolAnalyticsPatchOption[]> => {
+export const fetchPublishedAnalyticsPatches = cache(async (queue?: string | null, rankTier?: string | null): Promise<LolAnalyticsPatchOption[]> => {
   await connection();
   const normalizedQueue = normalizeAnalyticsQueue(queue);
-  const query = normalizedQueue === "solo" ? "" : `?queue=${normalizedQueue}`;
+  const params = new URLSearchParams();
+  if (normalizedQueue !== "solo") params.set("queue", normalizedQueue);
+  if (rankTier) params.set("rankTier", rankTier);
+  const query = params.size ? `?${params}` : "";
   const res = await fetchBackendJson<components["schemas"]["PublishedAnalyticsPatchOptionDto"][]>(
     `${getBackendBaseUrl()}/api/lol/analytics/published-patches${query}`,
     { cache: "no-store" }

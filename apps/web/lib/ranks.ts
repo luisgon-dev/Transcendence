@@ -1,6 +1,7 @@
 const RANK_DISPLAY_LABELS: Record<string, string> = {
   ALL: "All Ranks",
   EMERALD_PLUS: "Emerald+",
+  MASTER_PLUS: "Master+",
   IRON: "Iron",
   BRONZE: "Bronze",
   SILVER: "Silver",
@@ -16,6 +17,7 @@ const RANK_DISPLAY_LABELS: Record<string, string> = {
 export const RANK_TIER_FILTERS = [
   "all",
   "EMERALD_PLUS",
+  "MASTER_PLUS",
   "IRON",
   "BRONZE",
   "SILVER",
@@ -50,7 +52,7 @@ export function normalizeRankTierParam(value: string | null | undefined): string
  * - a valid tier       → that tier
  *
  * For "All Ranks" to remain selectable, the rank/role controls on these pages
- * must emit an explicit `?rankTier=all` (see RankFilterDropdown.emitAllRank).
+ * emit an explicit `?rankTier=all`.
  */
 export function resolveDefaultedRankTier(value: string | null | undefined): string | null {
   if (value === undefined || value === null || value.trim().length === 0) {
@@ -141,7 +143,7 @@ export function rankToLadderPoints(
 export function rankEmblemUrl(tier: string | null | undefined): string | null {
   if (!tier) return null;
   const normalized = normalizeRankToken(tier);
-  if (normalized === "ALL" || normalized === "UNRANKED" || normalized === "EMERALD_PLUS") {
+  if (rankTierLadderOrdinal(normalized) === Number.MAX_SAFE_INTEGER) {
     return null;
   }
 

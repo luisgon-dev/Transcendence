@@ -21,9 +21,8 @@ import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { fetchPublishedAnalyticsPatches } from "@/lib/lolAnalyticsPatches";
 import { latestPublishedPatchHref, normalizeAnalyticsPatch } from "@/lib/lolPatchFilters";
 import {
-  DEFAULT_TIERLIST_RANK_TIER,
-  normalizeRankTierParam,
-  rankTierDisplayLabel
+  rankTierDisplayLabel,
+  resolveDefaultedRankTier
 } from "@/lib/ranks";
 import { roleDisplayLabel } from "@/lib/roles";
 import { socialImageUrl } from "@/lib/seo";
@@ -48,10 +47,11 @@ export async function generateMetadata({
   const resolved = searchParams ? await searchParams : {};
   const role = (resolved.role ?? "ALL").toUpperCase();
   const queue = analyticsQueueOption(resolved.queue);
-  const rank = rankTierDisplayLabel(normalizeRankTierParam(resolved.rankTier) ?? DEFAULT_TIERLIST_RANK_TIER);
+  const rankTier = resolveDefaultedRankTier(resolved.rankTier);
+  const rank = rankTierDisplayLabel(rankTier);
   let patch = normalizeAnalyticsPatch(resolved.patch);
   if (!patch) {
-    const patches = await fetchPublishedAnalyticsPatches(queue.value);
+    const patches = await fetchPublishedAnalyticsPatches(queue.value, rankTier);
     patch = patches.find((candidate) => candidate.state === "Ready")?.patch ?? null;
   }
 
@@ -88,11 +88,8 @@ export default async function TierListPage({
     resolvedSearchParams?.region
   );
   const roleParam = queueOption.hasRoles ? (resolvedSearchParams?.role ?? "").toUpperCase() : "ALL";
-  const rawRankParam = resolvedSearchParams?.rankTier ?? null;
-  const normalizedRankParam = normalizeRankTierParam(rawRankParam);
   const selectedPatch = normalizeAnalyticsPatch(resolvedSearchParams?.patch);
-  const useDefaultRank = rawRankParam == null || rawRankParam.trim().length === 0;
-  const effectiveRankParam = useDefaultRank ? DEFAULT_TIERLIST_RANK_TIER : normalizedRankParam;
+  const effectiveRankParam = resolveDefaultedRankTier(resolvedSearchParams.rankTier);
 
   const verbosity = getErrorVerbosity();
   const fetchTierList = async (region: string) => {
@@ -110,7 +107,7 @@ export default async function TierListPage({
   };
   const [{ result: res, usedGlobalFallback }, patchOptions] = await Promise.all([
     fetchWithGlobalAnalyticsRegionFallback(activeRegion, fetchTierList),
-    fetchPublishedAnalyticsPatches(activeQueue)
+    fetchPublishedAnalyticsPatches(activeQueue, effectiveRankParam)
   ]);
   const {
     effectiveRegion,
@@ -118,6 +115,7 @@ export default async function TierListPage({
     fallbackMessage
   } = resolveAnalyticsRegionPresentation(activeRegion, activeRegionLabel, regionOptions, usedGlobalFallback);
   const sharedFilterParams = {
+    ...(activeRegion !== GLOBAL_ANALYTICS_REGION ? { region: activeRegion } : {}),
     ...(selectedPatch ? { patch: selectedPatch } : {}),
     ...(activeQueue !== "solo" ? { queue: activeQueue } : {})
   };

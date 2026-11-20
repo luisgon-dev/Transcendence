@@ -36,7 +36,7 @@ export function Confidence({ games, isLowSample, minGames, className }: Confiden
   const level = confidenceLevel({ games, isLowSample, minGames });
   const filled = FILLED_PIPS[level];
   const sampleLabel = confidenceSampleLabel(level);
-  const label = `${formatGames(games)} games · ${sampleLabel} sample`;
+  const label = `${formatGames(games)} games · ${sampleLabel}`;
   const filledTone = level === "low" ? "bg-warning" : "bg-fg/70";
 
   // Not a tab stop: the marker restates the adjacent games count, so it stayed out of the

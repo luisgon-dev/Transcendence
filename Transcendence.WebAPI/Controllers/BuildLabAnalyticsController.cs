@@ -16,7 +16,7 @@ public sealed class BuildLabAnalyticsController(IBuildLabService service) : Cont
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<BuildLabResponse>> Get(
         [FromRoute] int championId,
-        [FromQuery] string role,
+        [FromQuery] string? role = null,
         [FromQuery] int? opponentChampionId = null,
         [FromQuery] string? patch = null,
         [FromQuery] string? region = null,

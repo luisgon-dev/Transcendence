@@ -1134,6 +1134,7 @@ export interface paths {
             parameters: {
                 query?: {
                     queue?: string;
+                    rankTier?: string;
                 };
                 header?: never;
                 path?: never;
@@ -5563,7 +5564,7 @@ export interface components {
         BuildLabContextDto: {
             /** Format: int32 */
             championId: number;
-            role: string;
+            role?: string | null;
             /** Format: int32 */
             opponentChampionId?: number | null;
             requestedPatch?: string | null;

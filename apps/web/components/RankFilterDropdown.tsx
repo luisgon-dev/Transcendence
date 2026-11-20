@@ -13,15 +13,12 @@ export function RankFilterDropdown({
   activeRank,
   baseHref,
   extraParams,
-  emitAllRank = false,
   className
 }: {
   ranks: readonly string[];
   activeRank: string;
   baseHref: string;
   extraParams?: Record<string, string>;
-  /** Emit an explicit `rankTier=all` for the "all" option instead of omitting it (Emerald+-default pages). */
-  emitAllRank?: boolean;
   className?: string;
 }) {
   const router = useRouter();
@@ -34,12 +31,7 @@ export function RankFilterDropdown({
         if (v && v.toLowerCase() !== "all") params.set(k, v);
       }
     }
-    const isAll = !rank || rank.toLowerCase() === "all";
-    if (!isAll) {
-      params.set("rankTier", rank);
-    } else if (emitAllRank) {
-      params.set("rankTier", "all");
-    }
+    params.set("rankTier", rank.toLowerCase() === "all" ? "all" : rank);
     const qs = params.toString();
     startTransition(() => {
       router.push(qs ? `${baseHref}?${qs}` : baseHref);

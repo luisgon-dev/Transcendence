@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { BuildSummary, RecommendedBuild, StageList, stageNote, type Lookups, type ItemLookup, type RuneLookup, type SpellLookup } from "@/components/BuildLabResults";
 import { Button } from "@/components/ui/Button";
@@ -16,12 +16,15 @@ import {
   BUILD_LAB_SECTIONS,
   formatCompactCount,
   formatPercent,
+  buildLabChampionHref,
   buildLabPermalink,
   buildLabRegionLabel,
   buildLabRegionOptions,
   buildLabRequestQuery,
   clearBuildLabSelection,
   hasBuildLabSelection,
+  normalizeBuildLabRole,
+  readBuildLabUrl,
   selectBuildLabOption,
   undoLastBuildLabSelection,
   type BuildLabMode,
@@ -87,9 +90,7 @@ export function BuildLab({
   runes,
   spellVersion,
   spells,
-  initialState,
-  initialResponse,
-  initialIssues = []
+  initialResponse
 }: {
   championId: number;
   championSlug: string;
@@ -101,17 +102,16 @@ export function BuildLab({
   runes: RuneLookup;
   spellVersion: string;
   spells: SpellLookup;
-  initialState: BuildLabState;
   initialResponse: BuildLabResponse;
-  initialIssues?: string[];
 }) {
   const router = useRouter();
-  const [state, setState] = useState(initialState);
+  const searchParams = useSearchParams();
+  const { state, issues: linkIssues } = useMemo(() => readBuildLabUrl(searchParams), [searchParams]);
   const [response, setResponse] = useState(initialResponse);
   const [loading, setLoading] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
-  const [linkIssues, setLinkIssues] = useState<string[]>(initialIssues);
+  const role = state.role ?? normalizeBuildLabRole(response.context.role);
   const lookups: Lookups = { items, runes, spells, itemVersion, spellVersion };
 
   const championOptions = useMemo(
@@ -151,7 +151,7 @@ export function BuildLab({
         return (await result.json()) as BuildLabResponse;
       })
       .then((body) => {
-        setResponse(body);
+        if (!controller.signal.aborted) setResponse(body);
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
@@ -166,10 +166,8 @@ export function BuildLab({
   // Incremental selection uses replace: locking six items must not bury the previous page under six
   // history entries. Only the champion switch (a different route) pushes.
   function updateState(next: BuildLabState) {
-    setState(next);
     setSelectionError(null);
-    setLinkIssues([]);
-    router.replace(buildLabPermalink(championId, next), { scroll: false });
+    window.history.replaceState(null, "", buildLabPermalink(championId, next));
   }
 
   function selectOption(stage: BuildLabStage, option: BuildLabOption) {
@@ -215,7 +213,7 @@ export function BuildLab({
           </div>
         </div>
         <Link
-          href={`/lol/champions/${championId}?role=${state.role}`}
+          href={role ? `/lol/champions/${championId}?role=${role}` : `/lol/champions/${championId}`}
           className="shrink-0 pt-1 text-sm font-medium text-fg/70 hover:text-fg"
         >
           <span className="sm:hidden">Overview</span>
@@ -230,7 +228,10 @@ export function BuildLab({
             <Select
               value={String(championId)}
               options={championOptions}
-              onValueChange={(value) => router.push(buildLabPermalink(Number(value), state))}
+              onValueChange={(value) => router.push(buildLabChampionHref(Number(value), {
+                patch: state.patch,
+                region: state.region
+              }))}
               ariaLabel="Champion"
               className="w-full"
             />
@@ -238,7 +239,8 @@ export function BuildLab({
           <label className="grid min-w-0 gap-1.5">
             <span className="type-kicker text-muted">Role</span>
             <Select
-              value={state.role}
+              value={role ?? ""}
+              placeholder="Choose a role"
               options={BUILD_LAB_ROLES.map((role) => ({
                 value: role,
                 label: role === "UTILITY" ? "Support" : role[0] + role.slice(1).toLowerCase()
@@ -246,7 +248,7 @@ export function BuildLab({
               onValueChange={(role) =>
                 updateState({
                   ...state,
-                  role: role as BuildLabState["role"],
+                  role: normalizeBuildLabRole(role),
                   itemPath: [],
                   starter: [],
                   boots: undefined,

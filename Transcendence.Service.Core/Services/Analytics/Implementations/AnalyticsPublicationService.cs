@@ -9,11 +9,12 @@ public sealed class AnalyticsPublicationService(TranscendenceContext db) : IAnal
 {
     private const int PatchOptionLimit = 12;
 
-    public async Task<AnalyticsPublication> ResolveAsync(string? queueFamily, string? requestedPatch, CancellationToken ct)
+    public async Task<AnalyticsPublication> ResolveAsync(
+        string? queueFamily, string? requestedPatch, CancellationToken ct, string? rankTier = null)
     {
         var queue = AnalyticsQueueCatalog.Normalize(queueFamily);
         var requested = string.IsNullOrWhiteSpace(requestedPatch) ? null : requestedPatch.Trim();
-        var patches = ReadPatches(queue);
+        var patches = ReadPatches(queue, RankTierCatalog.NormalizeScopeToken(rankTier) == RankTierCatalog.MasterPlusScope);
         var active = await FindActivePatchAsync(patches, ct);
 
         var selected = requested == null || requested == active?.Version
@@ -39,13 +40,14 @@ public sealed class AnalyticsPublicationService(TranscendenceContext db) : IAnal
     }
 
     public async Task<IReadOnlyList<PublishedAnalyticsPatchOptionDto>> GetPatchOptionsAsync(
-        string? queueFamily, CancellationToken ct)
+        string? queueFamily, CancellationToken ct, string? rankTier = null)
     {
         var queue = AnalyticsQueueCatalog.Normalize(queueFamily);
-        var patches = ReadPatches(queue);
+        var scope = RankTierCatalog.NormalizeScopeToken(rankTier);
+        var patches = ReadPatches(queue, scope == RankTierCatalog.MasterPlusScope);
         var active = await FindActivePatchAsync(patches, ct);
         var counts = db.ScopeMatchCountStats.AsNoTracking().Where(x => x.QueueFamily == queue &&
-            x.PlatformRegion == AnalyticsRegionCatalog.GlobalRegionCode && x.RankScope == RankTierCatalog.AllScope);
+            x.PlatformRegion == AnalyticsRegionCatalog.GlobalRegionCode && x.RankScope == scope);
         var options = await EarlierPatches(patches, active).Where(p => p.ComputedAtUtc != null)
             .OrderByDescending(p => p.ReleaseDate).ThenByDescending(p => p.Version)
             .Take(active == null ? PatchOptionLimit : PatchOptionLimit - 1)
@@ -70,7 +72,7 @@ public sealed class AnalyticsPublicationService(TranscendenceContext db) : IAnal
         return options;
     }
 
-    private IQueryable<PatchPublication> ReadPatches(string queue) =>
+    private IQueryable<PatchPublication> ReadPatches(string queue, bool requireMasterPlus) =>
         db.Patches.AsNoTracking().Select(p => new PatchPublication
         {
             Version = p.Version,
@@ -78,6 +80,9 @@ public sealed class AnalyticsPublicationService(TranscendenceContext db) : IAnal
             DetectedAt = p.DetectedAt,
             IsActive = p.IsActive,
             ComputedAtUtc = db.ChampionRoleTierStats.Any(x => x.Patch == p.Version && x.QueueFamily == queue)
+                && (!requireMasterPlus || db.ScopeMatchCountStats.Any(x => x.Patch == p.Version &&
+                    x.QueueFamily == queue && x.PlatformRegion == AnalyticsRegionCatalog.GlobalRegionCode &&
+                    x.RankScope == RankTierCatalog.MasterPlusScope))
                 ? db.ChampionScopeGradeStats
                     .Where(x => x.Patch == p.Version && x.QueueFamily == queue &&
                                 x.PlatformRegion == AnalyticsRegionCatalog.GlobalRegionCode &&

@@ -937,14 +937,7 @@ public class ChampionAnalyticsService : IChampionAnalyticsService
             : AnalyticsRegionCatalog.GlobalRegionCode;
     }
 
-    private static string NormalizeRankTier(string? rankTier)
-    {
-        if (string.IsNullOrWhiteSpace(rankTier))
-            return "all";
-
-        var normalized = rankTier.Trim().ToUpperInvariant().Replace("+", "_PLUS");
-        return normalized == "ALL" ? "all" : normalized;
-    }
+    private static string NormalizeRankTier(string? rankTier) => AnalyticsScopeMath.ParseRankTierScope(rankTier).CacheToken;
 
     private AnalyticsSampleMetadata BuildSampleMetadata(int sampleSize, ActivePatchContext patchContext)
     {

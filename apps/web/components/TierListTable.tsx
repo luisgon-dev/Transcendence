@@ -329,7 +329,7 @@ export function TierListTable({
     const rowParams = new URLSearchParams();
     if (showRoles) rowParams.set("role", entry.role);
     if (activeQueue !== "solo") rowParams.set("queue", activeQueue);
-    if (rankTierValue) rowParams.set("rankTier", rankTierValue);
+    rowParams.set("rankTier", rankTierValue ?? "all");
     if (activeRegion !== "ALL") rowParams.set("region", activeRegion);
     if (activePatch) rowParams.set("patch", activePatch);
     const rowQuery = rowParams.toString();

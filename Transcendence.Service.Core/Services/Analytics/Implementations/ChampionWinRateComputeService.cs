@@ -77,16 +77,9 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
                                };
 
         // Apply rank tier filter if specified
-        if (rankTierScope.IsEmeraldPlus)
-        {
-            participantRanks = participantRanks
-                .Where(pr => RankTierCatalog.EmeraldPlusTiers.Contains(pr.RankTier));
-        }
-        else if (!string.IsNullOrWhiteSpace(rankTierScope.ExactTier))
-        {
-            participantRanks = participantRanks
-                .Where(pr => pr.RankTier == rankTierScope.ExactTier);
-        }
+        var scopedTiers = rankTierScope.Tiers;
+        if (scopedTiers != null)
+            participantRanks = participantRanks.Where(pr => scopedTiers.Contains(pr.RankTier));
 
         // P5.2: total games + the per-(role, tier) aggregation are computed in SQL instead of
         // materialising every participant row (~tens of thousands for a popular champion) and
@@ -164,10 +157,8 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
                     RankTier = soloRank != null ? soloRank.Tier : "UNRANKED"
                 };
 
-        if (rankTierScope.IsEmeraldPlus)
-            populationRanks = populationRanks.Where(pr => RankTierCatalog.EmeraldPlusTiers.Contains(pr.RankTier));
-        else if (!string.IsNullOrWhiteSpace(rankTierScope.ExactTier))
-            populationRanks = populationRanks.Where(pr => pr.RankTier == rankTierScope.ExactTier);
+        if (scopedTiers != null)
+            populationRanks = populationRanks.Where(pr => scopedTiers.Contains(pr.RankTier));
 
         var standingsRows = await populationRanks
             .GroupBy(pr => new { pr.Role, pr.RankTier, pr.ChampionId })
@@ -590,9 +581,9 @@ public sealed class ChampionWinRateComputeService : IChampionWinRateComputeServi
         var regionFilter = AnalyticsRegionCatalog.NormalizeToFilter(region);
 
         // Fast path: the persisted grade table is the single source of truth for the default scopes
-        // (region=ALL with scope ALL or EMERALD_PLUS) and the only place patch-over-patch movement exists.
+        // and the only place patch-over-patch movement exists.
         var isPersistedScope = regionFilter == null
-            && (scopeToken == RankTierCatalog.AllScope || scopeToken == RankTierCatalog.EmeraldPlusScope);
+            && RankTierCatalog.PersistedGradeScopes.Contains(scopeToken);
         if (isPersistedScope && await HasGradesAsync(patch, normalizedQueue, scopeToken, ct))
             return await ReadGradeTableAsync(patch, normalizedQueue, scopeToken, isUnifiedRole ? "ALL" : normalizedRole, ct);
 

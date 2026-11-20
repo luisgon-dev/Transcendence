@@ -26,7 +26,7 @@ namespace Transcendence.IntegrationTests;
 public sealed class AnalyticsEquivalenceRealPostgresTests(PostgresIntegrationFixture fixture)
 {
     private static readonly string?[] Regions = [null, "NA1", "EUW1"];                 // null = ALL
-    private static readonly string?[] Tiers = [null, "ALL", "EMERALD_PLUS", "EMERALD", "DIAMOND"];
+    private static readonly string?[] Tiers = [null, "ALL", "EMERALD_PLUS", "MASTER_PLUS", "EMERALD", "DIAMOND"];
     private static readonly string?[] Roles = [null, "TOP", "MIDDLE"];
 
     [Fact]
@@ -105,6 +105,34 @@ public sealed class AnalyticsEquivalenceRealPostgresTests(PostgresIntegrationFix
     }
 
     [Fact]
+    public async Task MasterPlusCountsMixedTierMatchesAndBansOnce()
+    {
+        var patch = UniquePatch();
+        await using var db = NewDb();
+        var mixed = AddGames(db, patch, "NA1", "MASTER", 100, "TOP", wins: 1, losses: 0).Single();
+        AddParticipant(db, mixed, "GRANDMASTER", 300, "MIDDLE", true, participantId: 2);
+        var challenger = AddGames(db, patch, "NA1", "CHALLENGER", 100, "TOP", wins: 0, losses: 1).Single();
+        var diamond = AddGames(db, patch, "NA1", "DIAMOND", 100, "TOP", wins: 1, losses: 0).Single();
+        AddGames(db, patch, "NA1", null, 100, "TOP", wins: 1, losses: 0);
+        SeedBan(db, mixed, 100);
+        SeedBan(db, diamond, 100);
+        SeedBan(db, challenger, 200);
+        await db.SaveChangesAsync();
+        await RefreshAsync(db, patch);
+
+        var count = await db.ScopeMatchCountStats.SingleAsync(row => row.Patch == patch &&
+            row.QueueFamily == "RANKED_SOLO_DUO" && row.RankScope == "MASTER_PLUS" && row.PlatformRegion == "ALL");
+        count.TotalMatches.Should().Be(2);
+        var calc = WinRateService(db);
+        var filter = new ChampionAnalyticsFilter(RankTier: "MASTER_PLUS", Region: "NA1", Role: "TOP");
+        var raw = await calc.ComputeWinRatesAsync(100, filter, patch, default);
+        var stored = await calc.ComputeWinRatesFromStatsAsync(100, filter, patch, default);
+        stored.Should().BeEquivalentTo(raw);
+        stored.Select(row => row.RankTier).Should().BeEquivalentTo(new[] { "MASTER", "CHALLENGER" });
+        stored.Should().OnlyContain(row => row.BanRate == 0.5);
+    }
+
+    [Fact]
     public async Task WinRates_StatsPath_EqualsRawCompute_OnRealPostgres()
     {
         var patch = UniquePatch();
@@ -155,7 +183,7 @@ public sealed class AnalyticsEquivalenceRealPostgresTests(PostgresIntegrationFix
 
         var nonEmptyComparisons = 0;
         foreach (var region in Regions)
-        foreach (var tier in new string?[] { null, "ALL", "EMERALD_PLUS", "EMERALD" })
+        foreach (var tier in Tiers)
         {
             var raw = await svc.ComputeTierListAsync(null, tier, region, patch, CancellationToken.None);
             var stats = await svc.ComputeTierListFromStatsAsync(null, tier, region, patch, CancellationToken.None);
@@ -314,6 +342,9 @@ public sealed class AnalyticsEquivalenceRealPostgresTests(PostgresIntegrationFix
         AddGames(db, patch, "NA1", "EMERALD", 100, "MIDDLE", wins: 1, losses: 0);
         AddGames(db, patch, "NA1", "EMERALD", 200, "MIDDLE", wins: 2, losses: 1);
         AddGames(db, patch, "NA1", "DIAMOND", 100, "TOP", wins: 1, losses: 1);
+        AddGames(db, patch, "NA1", "MASTER", 100, "TOP", wins: 1, losses: 0);
+        AddGames(db, patch, "NA1", "GRANDMASTER", 200, "TOP", wins: 1, losses: 1);
+        AddGames(db, patch, "EUW1", "CHALLENGER", 300, "TOP", wins: 1, losses: 1);
         AddGames(db, patch, "NA1", "DIAMOND", 300, "TOP", wins: 1, losses: 0);
         AddGames(db, patch, "NA1", null, 100, "TOP", wins: 1, losses: 0);          // UNRANKED
         AddGames(db, patch, "EUW1", "EMERALD", 100, "TOP", wins: 1, losses: 0);
@@ -351,20 +382,6 @@ public sealed class AnalyticsEquivalenceRealPostgresTests(PostgresIntegrationFix
         TranscendenceContext db, string patch, string region, string? tier, int champ, string role, bool win,
         int queueId, string queueFamily)
     {
-        var summoner = new Summoner
-        {
-            Id = Guid.NewGuid(),
-            PlatformRegion = region,
-            Region = "americas",
-            GameName = Guid.NewGuid().ToString("N")[..8],
-            TagLine = region,
-            Puuid = Guid.NewGuid().ToString("N"),
-            SummonerName = "s",
-            RiotSummonerId = Guid.NewGuid().ToString("N")
-        };
-        if (tier != null)
-            db.Ranks.Add(new Rank { Id = Guid.NewGuid(), SummonerId = summoner.Id, QueueType = "RANKED_SOLO_5x5", Tier = tier });
-
         var match = new Match
         {
             Id = Guid.NewGuid(),
@@ -379,9 +396,29 @@ public sealed class AnalyticsEquivalenceRealPostgresTests(PostgresIntegrationFix
             PlatformRegion = region,
             FetchedAt = DateTime.UtcNow
         };
+        db.Matches.Add(match);
+        AddParticipant(db, match, tier, champ, role, win, participantId: 1);
+        return match;
+    }
+
+    private static void AddParticipant(
+        TranscendenceContext db, Match match, string? tier, int champ, string role, bool win, int participantId)
+    {
+        var summoner = new Summoner
+        {
+            Id = Guid.NewGuid(),
+            PlatformRegion = match.PlatformRegion!,
+            Region = "americas",
+            GameName = Guid.NewGuid().ToString("N")[..8],
+            TagLine = match.PlatformRegion!,
+            Puuid = Guid.NewGuid().ToString("N"),
+            SummonerName = "s",
+            RiotSummonerId = Guid.NewGuid().ToString("N")
+        };
+        if (tier != null)
+            db.Ranks.Add(new Rank { Id = Guid.NewGuid(), SummonerId = summoner.Id, QueueType = "RANKED_SOLO_5x5", Tier = tier });
 
         db.Summoners.Add(summoner);
-        db.Matches.Add(match);
         db.MatchParticipants.Add(new MatchParticipant
         {
             Id = Guid.NewGuid(),
@@ -390,13 +427,12 @@ public sealed class AnalyticsEquivalenceRealPostgresTests(PostgresIntegrationFix
             SummonerId = summoner.Id,
             Summoner = summoner,
             Puuid = summoner.Puuid,
-            ParticipantId = 1,
+            ParticipantId = participantId,
             TeamId = 100,
             ChampionId = champ,
             TeamPosition = role,
             Win = win
         });
-        return match;
     }
 
     private static void SeedBan(TranscendenceContext db, Match match, int championId) =>

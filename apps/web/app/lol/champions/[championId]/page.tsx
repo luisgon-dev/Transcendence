@@ -30,6 +30,7 @@ import { analyticsQueueOption, normalizeAnalyticsQueue } from "@/lib/analyticsQu
 import { analyticsFeatureFlags } from "@/lib/analyticsFeatureFlags";
 import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { pickMostSevereAnalyticsSample, type AnalyticsSampleLike } from "@/lib/analyticsSample";
+import { buildLabChampionHref } from "@/lib/buildLab";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { formatGames, matchupVerdict } from "@/lib/format";
 import { championDisplayName } from "@/lib/gameDisplay";
@@ -89,7 +90,7 @@ export async function generateMetadata({
   try {
     const [{ champions }, patches] = await Promise.all([
       fetchChampionMap(),
-      selectedPatch ? Promise.resolve([]) : fetchPublishedAnalyticsPatches(queue.value)
+      selectedPatch ? Promise.resolve([]) : fetchPublishedAnalyticsPatches(queue.value, resolveDefaultedRankTier(resolvedSearchParams.rankTier))
     ]);
     const champion = champions[championId];
     if (champion?.name?.trim()) championName = championDisplayName(champion);
@@ -175,7 +176,7 @@ const loadChampionData = cache(async (championId: number, sp: ChampionSearchPara
   const profileQuery = winrateQuery.toString() ? `?${winrateQuery.toString()}` : "";
 
   const [patchOptions, profileRes] = await Promise.all([
-    fetchPublishedAnalyticsPatches(activeQueue),
+    fetchPublishedAnalyticsPatches(activeQueue, normalizedRankTier),
     fetchBackendJson<ChampionProfileAnalyticsResponse>(
       `${getBackendBaseUrl()}/api/lol/analytics/champions/${championId}/profile${profileQuery}`,
       { cache: "no-store" }
@@ -314,7 +315,7 @@ async function ChampionHeroMeta({
   const builds = profile.builds ?? null;
   const matchups = profile.matchups ?? null;
   const effectiveRole = queueOption.hasRoles
-    ? normalizeRole(profile.effectiveRole) ?? explicitRole ?? pickMostPlayedRole(winrates) ?? "MIDDLE"
+    ? explicitRole ?? normalizeRole(profile.effectiveRole) ?? pickMostPlayedRole(winrates) ?? "MIDDLE"
     : "ALL";
   const heroEntry = pickBestEntry(winrates, effectiveRole);
   // The hero grade is the SAME grade the tier list shows (read off the profile payload), not a locally
@@ -332,6 +333,7 @@ async function ChampionHeroMeta({
   if (selectedPatch) linkParams.set("patch", selectedPatch);
   const linkQuery = linkParams.toString();
   const sharedFilterParams = {
+    ...(activeRegion !== "ALL" ? { region: activeRegion } : {}),
     ...(selectedPatch ? { patch: selectedPatch } : {}),
     ...(activeQueue !== "solo" ? { queue: activeQueue } : {})
   };
@@ -347,7 +349,6 @@ async function ChampionHeroMeta({
       activeQueue={activeQueue}
       showRoles={queueOption.hasRoles}
       extraParams={sharedFilterParams}
-      explicitAllRank
       baseHref={`/lol/champions/${championId}`}
     />
   );
@@ -523,7 +524,7 @@ async function ChampionSections({
   const styleById = runeStatic.styleById;
   const runeTrees = runeStatic.trees;
   const effectiveRole = queueOption.hasRoles
-    ? normalizeRole(profile.effectiveRole) ?? explicitRole ?? pickMostPlayedRole(winrates) ?? "MIDDLE"
+    ? explicitRole ?? normalizeRole(profile.effectiveRole) ?? pickMostPlayedRole(winrates) ?? "MIDDLE"
     : "ALL";
   // Show only the active role's win rates (broken down by rank) so the table stays compact and
   // doesn't dominate the page — other roles are reachable via the role filter. When a role is in the
@@ -559,7 +560,7 @@ async function ChampionSections({
     };
   });
   const linkParams = new URLSearchParams();
-  if (normalizedRankTier) linkParams.set("rankTier", normalizedRankTier);
+  linkParams.set("rankTier", normalizedRankTier ?? "all");
   if (activeRegion !== "ALL") linkParams.set("region", activeRegion);
   if (selectedPatch) linkParams.set("patch", selectedPatch);
   if (activeQueue !== "solo") linkParams.set("queue", activeQueue);
@@ -570,10 +571,7 @@ async function ChampionSections({
   // Only a publishable generation earns the answer-first summary. Without one the page keeps the
   // full descriptive build experience below, unchanged.
   const recommendationLive = showRecommendation && recommendation?.available === true;
-  const buildLabParams = new URLSearchParams({ role: effectiveRole });
-  if (selectedPatch) buildLabParams.set("patch", selectedPatch);
-  if (activeRegion !== "ALL") buildLabParams.set("region", activeRegion);
-  const buildLabHref = `/lol/builds/${championId}?${buildLabParams.toString()}`;
+  const buildLabHref = buildLabChampionHref(championId, { role: effectiveRole, patch: selectedPatch, region: activeRegion });
 
   return (
     <>

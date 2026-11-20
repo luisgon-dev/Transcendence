@@ -6,6 +6,7 @@ import { BuildLab } from "@/components/BuildLab";
 import { analyticsFeatureFlags } from "@/lib/analyticsFeatureFlags";
 import { fetchBackendJson } from "@/lib/backendCall";
 import {
+  buildLabPermalink,
   buildLabRequestQuery,
   normalizeBuildLabState,
   type BuildLabResponse
@@ -51,7 +52,7 @@ export default async function ChampionBuildLabPage({
     return <BackendErrorCard title="Build Lab" message="That champion route is invalid." />;
   }
 
-  const { state, issues } = normalizeBuildLabState(rawSearchParams);
+  const { state } = normalizeBuildLabState(rawSearchParams);
   const [championStatic, itemStatic, runeStatic, spellStatic] = await Promise.all([
     fetchChampionMap(),
     fetchItemMap(),
@@ -71,7 +72,7 @@ export default async function ChampionBuildLabPage({
     available: false,
     context: {
       championId,
-      role: state.role,
+      role: state.role ?? null,
       opponentChampionId: state.opponentChampionId,
       requestedPatch: state.patch ?? null,
       requestedRegion: state.region ?? "ALL",
@@ -100,6 +101,7 @@ export default async function ChampionBuildLabPage({
 
   return (
     <BuildLab
+      key={buildLabPermalink(championId, state)}
       championId={championId}
       championSlug={champion.id}
       championName={champion.name}
@@ -110,9 +112,7 @@ export default async function ChampionBuildLabPage({
       runes={runeStatic.runeById}
       spellVersion={spellStatic.version}
       spells={spellStatic.spells}
-      initialState={state}
       initialResponse={result.body ?? emptyResponse}
-      initialIssues={issues}
     />
   );
 }

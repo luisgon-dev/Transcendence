@@ -73,7 +73,34 @@ public class PrecomputedAnalyticsRefresherTests
 
         // Empty scopes (IRON/BRONZE/SILVER/MASTER/...) produce no rows at all.
         rows.Should().NotContain(r => r.RankScope == "IRON");
-        rows.Should().NotContain(r => r.TotalMatches == 0);
+        rows.Where(r => r.TotalMatches == 0).Should().OnlyContain(r => r.RankScope == "MASTER_PLUS" && r.PlatformRegion == "ALL");
+        rows.Should().Contain(r => r.QueueFamily == "RANKED_SOLO_DUO" && r.RankScope == "MASTER_PLUS" && r.TotalMatches == 0);
+    }
+
+    [Fact]
+    public async Task MasterPlusCountsDistinctMatchesWithMultipleQualifyingRanks()
+    {
+        await using var ctx = await SeededAsync();
+        var participants = await ctx.Db.MatchParticipants.Include(row => row.Match).ToListAsync();
+        var master = participants.Single(row => row.Match.MatchId == "NA1_1");
+        var grandmaster = participants.Single(row => row.Match.MatchId == "NA1_2");
+        var challenger = participants.Single(row => row.Match.MatchId == "EUW1_7");
+        var ranks = await ctx.Db.Ranks.ToListAsync();
+        ranks.Single(row => row.SummonerId == master.SummonerId).Tier = "MASTER";
+        ranks.Single(row => row.SummonerId == grandmaster.SummonerId).Tier = "GRANDMASTER";
+        ranks.Single(row => row.SummonerId == challenger.SummonerId).Tier = "CHALLENGER";
+        grandmaster.Match = master.Match;
+        grandmaster.ParticipantId = 2;
+        await ctx.Db.SaveChangesAsync();
+
+        await Refresh(ctx.Db);
+
+        var counts = await ctx.Db.ScopeMatchCountStats.Where(row => row.QueueFamily == "RANKED_SOLO_DUO").ToListAsync();
+        Total(counts, "NA1", "MASTER_PLUS").Should().Be(1);
+        Total(counts, "ALL", "MASTER_PLUS").Should().Be(2);
+        var bans = await ctx.Db.ChampionBanScopeStats.Where(row => row.ChampionId == 999).ToListAsync();
+        Banned(bans, "NA1", "MASTER_PLUS").Should().Be(1);
+        Banned(bans, "ALL", "MASTER_PLUS").Should().Be(2);
     }
 
     [Fact]

@@ -1,19 +1,26 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BuildLab } from "./BuildLab";
-import type { BuildLabOption, BuildLabResponse, BuildLabStage, BuildLabState } from "@/lib/buildLab";
+import { buildLabPermalink, type BuildLabOption, type BuildLabResponse, type BuildLabStage, type BuildLabState } from "@/lib/buildLab";
 
 const router = vi.hoisted(() => ({
   push: vi.fn(),
-  replace: vi.fn(),
   prefetch: vi.fn()
 }));
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => router
-}));
+vi.mock("next/navigation", async () => {
+  const { useSyncExternalStore } = await import("react");
+  function subscribe(update: () => void) {
+    window.addEventListener("popstate", update);
+    return () => window.removeEventListener("popstate", update);
+  }
+  return {
+    useRouter: () => router,
+    useSearchParams: () => new URLSearchParams(useSyncExternalStore(subscribe, () => window.location.search))
+  };
+});
 
 const champions = [
   { championId: 103, slug: "Ahri", name: "Ahri" },
@@ -136,6 +143,7 @@ function renderLab({
     ...state
   };
   const initialResponse = { ...baseResponse, ...response };
+  window.history.replaceState(null, "", buildLabPermalink(103, initialState));
   vi.mocked(fetch).mockImplementation(
     async () =>
       new Response(JSON.stringify(initialResponse), {
@@ -155,7 +163,6 @@ function renderLab({
       runes={runes}
       spellVersion="16.19.1"
       spells={spells}
-      initialState={initialState}
       initialResponse={initialResponse}
     />
   );
@@ -175,8 +182,29 @@ function requestedUrls() {
 describe("BuildLab", () => {
   beforeEach(() => {
     router.push.mockReset();
-    router.replace.mockReset();
+    const replaceState = window.history.replaceState.bind(window.history);
+    vi.spyOn(window.history, "replaceState").mockImplementation((...args) => {
+      replaceState(...args);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
     vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("shows the server-selected role on automatic loads and honors the URL role", async () => {
+    renderLab({ state: { role: undefined }, response: { context: { ...baseResponse.context, role: "JUNGLE" } } });
+
+    expect(screen.getByRole("combobox", { name: "Role" }).textContent).toContain("Jungle");
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    expect(new URL(requestedUrls()[0], location.origin).searchParams.has("role")).toBe(false);
+
+    window.history.replaceState(null, "", "/lol/builds/103?role=UTILITY");
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Role" }).textContent).toContain("Support"));
+    expect(requestedUrls().at(-1)).toContain("role=UTILITY");
   });
 
   it("shows the adjusted win rate, lift, interval, raw rate, pick rate and games per choice", async () => {
@@ -212,10 +240,7 @@ describe("BuildLab", () => {
 
     await user.click(within(row("Luden's Companion")).getByRole("button", { name: "Lock" }));
 
-    expect(router.replace).toHaveBeenLastCalledWith(
-      expect.stringContaining("itemPath=6655"),
-      { scroll: false }
-    );
+    expect(window.location.search).toContain("itemPath=6655");
     await waitFor(() => expect(requestedUrls().at(-1)).toContain("itemPath=6655"));
   });
 
@@ -226,9 +251,7 @@ describe("BuildLab", () => {
 
     await user.click(within(row("Doran's Ring")).getByRole("button", { name: "Pick" }));
 
-    expect(router.replace).toHaveBeenLastCalledWith(expect.stringContaining("starter=1056"), {
-      scroll: false
-    });
+    expect(window.location.search).toContain("starter=1056");
     expect(screen.getByText("Your build")).toBeTruthy();
     // A terminal pick conditions nothing, so the read the page already has stays valid.
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -240,7 +263,7 @@ describe("BuildLab", () => {
 
     await user.click(screen.getByRole("button", { name: "Undo" }));
 
-    const url = router.replace.mock.calls.at(-1)?.[0] as string;
+    const url = window.location.search;
     expect(url).toContain("itemPath=6655");
     expect(url).not.toContain("3118");
   });
@@ -275,7 +298,7 @@ describe("BuildLab", () => {
     expect(screen.getByText("No counted games followed this exact path.")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Show all games for this role" }));
 
-    const url = router.replace.mock.calls.at(-1)?.[0] as string;
+    const url = window.location.search;
     expect(url).not.toContain("opponentChampionId");
     expect(url).not.toContain("itemPath");
   });
@@ -381,7 +404,7 @@ describe("BuildLab", () => {
     expect(within(strip).getByText("Flash + Ignite")).toBeTruthy();
     await user.click(within(strip).getByRole("button", { name: "Follow this build" }));
 
-    const url = router.replace.mock.calls.at(-1)?.[0] as string;
+    const url = window.location.search;
     expect(url).toContain("itemPath=6655&itemPath=3118");
     expect(url).toContain("skillPriority=1&skillPriority=3&skillPriority=2");
   });

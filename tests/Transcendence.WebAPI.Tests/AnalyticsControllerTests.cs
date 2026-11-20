@@ -123,7 +123,7 @@ public class AnalyticsControllerTests
         var service = new Mock<IChampionAnalyticsService>(MockBehavior.Strict);
         var publicationService = new Mock<IAnalyticsPublicationService>(MockBehavior.Strict);
         var publication = new AnalyticsPublication(new(AnalyticsPatchSelectionState.Ready, "15.2", "15.1", "15.1"));
-        publicationService.Setup(x => x.ResolveAsync("aram", "15.1", It.IsAny<CancellationToken>()))
+        publicationService.Setup(x => x.ResolveAsync("aram", "15.1", It.IsAny<CancellationToken>(), "EMERALD_PLUS"))
             .ReturnsAsync(publication);
         service
             .Setup(x => x.GetPublishedTierListAsync("TOP", "EMERALD_PLUS", "KR", "aram", publication, It.IsAny<CancellationToken>()))

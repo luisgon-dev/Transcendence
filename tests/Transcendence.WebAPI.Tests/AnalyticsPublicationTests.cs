@@ -21,7 +21,7 @@ public class AnalyticsPublicationTests
     {
         var selection = new AnalyticsPatchSelection(state, "16.14", requested, null);
         var publicationService = new Mock<IAnalyticsPublicationService>(MockBehavior.Strict);
-        publicationService.Setup(x => x.ResolveAsync("RANKED_FLEX", requested, It.IsAny<CancellationToken>()))
+        publicationService.Setup(x => x.ResolveAsync("RANKED_FLEX", requested, It.IsAny<CancellationToken>(), "emerald+"))
             .ReturnsAsync(new AnalyticsPublication(selection));
         var analytics = new Mock<IChampionAnalyticsService>(MockBehavior.Strict);
         var scopes = new Mock<IServiceScopeFactory>(MockBehavior.Strict);
@@ -56,12 +56,12 @@ public class AnalyticsPublicationTests
             new("16.13", now.AddDays(-14), now.AddDays(-14), false, 41, "ARAM", AnalyticsPatchSelectionState.Ready)
         ];
         var publication = new Mock<IAnalyticsPublicationService>(MockBehavior.Strict);
-        publication.Setup(x => x.GetPatchOptionsAsync("aram", It.IsAny<CancellationToken>())).ReturnsAsync(options);
+        publication.Setup(x => x.GetPatchOptionsAsync("aram", It.IsAny<CancellationToken>(), "MASTER_PLUS")).ReturnsAsync(options);
         var controller = new AnalyticsController(Mock.Of<IChampionAnalyticsService>(MockBehavior.Strict),
             Mock.Of<IAnalyticsPatchQueryService>(MockBehavior.Strict),
             Options.Create(new MultiRegionIngestionOptions()), publication.Object);
 
-        var result = await controller.GetPublishedPatches("aram");
+        var result = await controller.GetPublishedPatches("aram", rankTier: "MASTER_PLUS");
 
         var payload = result.Should().BeOfType<OkObjectResult>().Subject.Value;
         payload.Should().BeEquivalentTo(options);

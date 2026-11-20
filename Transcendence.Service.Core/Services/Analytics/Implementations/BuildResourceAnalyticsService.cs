@@ -6,6 +6,7 @@ using Transcendence.Data.Models.LoL.Analytics;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.RiotApi;
+using Transcendence.Service.Core.Services.StaticData.Models;
 
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
@@ -343,7 +344,7 @@ public sealed class BuildResourceAnalyticsService(
         $"analytics:build-resources:v3:{resourceType}:{version}:{region}";
 
     private static string DetailKey(string resourceType, int resourceId, string version, string region) =>
-        $"analytics:build-resource:v3:{resourceType}:{resourceId}:{version}:{region}";
+        $"analytics:build-resource:v4:{resourceType}:{resourceId}:{version}:{region}";
 
     private async Task<SnapshotData> LoadSnapshotDataAsync(
         Guid snapshotId,
@@ -438,7 +439,7 @@ public sealed class BuildResourceAnalyticsService(
             .Where(rune => rune.PatchVersion == patch && (resourceId == null || rune.RuneId == resourceId))
             .ToDictionaryAsync(
                 rune => rune.RuneId,
-                rune => new ResourceMetadata(rune.Name, rune.Description),
+                rune => new ResourceMetadata(rune.Name, RuneDescription.ToPlainText(rune.Description)),
                 ct);
     }
 

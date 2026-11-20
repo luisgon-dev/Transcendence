@@ -11,6 +11,7 @@ import {
   hasBuildLabSelection,
   liftToneClass,
   normalizeBuildLabState,
+  readBuildLabUrl,
   selectBuildLabOption,
   undoLastBuildLabSelection,
   type BuildLabState
@@ -45,20 +46,9 @@ const emptyState: BuildLabState = {
   skillStart: []
 };
 
-function reparse(query: URLSearchParams) {
-  return normalizeBuildLabState(
-    Object.fromEntries(
-      [...new Set(query.keys())].map((key) => {
-        const values = query.getAll(key);
-        return [key, values.length === 1 ? values[0] : values];
-      })
-    )
-  ).state;
-}
-
 describe("Build Lab URL state", () => {
   it("round-trips the complete shareable context", () => {
-    expect(reparse(buildLabQuery(completeState))).toEqual(completeState);
+    expect(readBuildLabUrl(buildLabQuery(completeState)).state).toEqual(completeState);
     expect(buildLabPermalink(64, completeState)).toContain("/lol/builds/64?");
   });
 
@@ -95,7 +85,9 @@ describe("Build Lab URL state", () => {
       opponentChampionId: "-3"
     });
 
-    expect(state).toMatchObject({ role: "MIDDLE", section: "items", mode: "supported" });
+    expect(state).toMatchObject({ section: "items", mode: "supported" });
+    expect(state.role).toBeUndefined();
+    expect(buildLabRequestQuery(state).has("role")).toBe(false);
     expect(state.patch).toBeUndefined();
     expect(state.region).toBeUndefined();
     expect(state.opponentChampionId).toBeUndefined();

@@ -23,16 +23,13 @@ export type ChampionGridEntry = {
 export function ChampionsGridClient({
   champions,
   version,
-  activeRegion = "ALL",
   activePatch
 }: {
   champions: ChampionGridEntry[];
   version: string;
-  activeRegion?: string;
   activePatch?: string | null;
 }) {
   const filters = new URLSearchParams();
-  if (activeRegion !== "ALL") filters.set("region", activeRegion);
   if (activePatch) filters.set("patch", activePatch);
   const linkQuery = filters.size ? `?${filters}` : "";
   const [query, setQuery] = useState("");

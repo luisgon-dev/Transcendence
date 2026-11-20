@@ -315,7 +315,8 @@ public sealed class BuildResourceAnalyticsServiceTests
         db.RuneVersions.Add(new RuneVersion
         {
             RuneId = 8005, PatchVersion = patch, Name = "Press the Attack", RunePathId = 8000,
-            RunePathName = "Precision", Slot = 0
+            RunePathName = "Precision", Slot = 0,
+            Description = "<lol-uikit-tooltipped-keyword key='LinkTooltip_Description_Takedown'>Takedowns</lol-uikit-tooltipped-keyword> restore 5% of your missing health and grant an additional 20 gold.<br>Health &amp; gold."
         });
         // Two regions, so the all-region pages sum per champion/role across them as the read path does.
         AddMatch(db, "NA1_WARM_1", patch, "NA1", (1, 266, "TOP", true, true), (2, 64, "JUNGLE", false, true));
@@ -350,7 +351,7 @@ public sealed class BuildResourceAnalyticsServiceTests
         var coldItem = await cold.GetItemAsync(3078, null, null);
         var coldRune = await cold.GetRuneAsync(8005, null, null);
         coldItem.Should().NotBeNull();
-        coldRune.Should().NotBeNull();
+        coldRune!.Resource.Description.Should().Be("Takedowns restore 5% of your missing health and grant an additional 20 gold. Health & gold.");
 
         // With the stat rows gone, the warmed service can only answer from what the refresher cached.
         await using var transaction = await db.Database.BeginTransactionAsync();

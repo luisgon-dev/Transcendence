@@ -49,7 +49,6 @@ public partial class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefres
 
     /// <summary>Rank scopes the tier grade is persisted for (region=ALL) — the scopes every web surface
     /// defaults to. Specific tiers (and specific regions) compute on read via the same scorer.</summary>
-    private static readonly string[] GradedScopes = [RankTierCatalog.AllScope, RankTierCatalog.EmeraldPlusScope];
 
     /// <summary>Role partition key for the primary-role "All Roles" overview grade rows.</summary>
     private const string OverviewRole = "ALL";
@@ -439,7 +438,8 @@ public partial class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefres
             // Global (region=ALL): distinct over the scope ignoring region. Per-region rows are also now
             // single-valued by match, so a transferred participant cannot double-count one match.
             var allTotal = await scoped.Select(mp => mp.MatchId).Distinct().CountAsync(ct);
-            if (allTotal > 0)
+            // This row also marks publication for Master+ when there were zero qualifying matches.
+            if (allTotal > 0 || scope == RankTierCatalog.MasterPlusScope)
             {
                 scopeMatchRows.Add(new ScopeMatchCountStat
                 {
@@ -525,7 +525,7 @@ public partial class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefres
         var previousGrades = await LoadPreviousPatchGradesAsync(patch, queueFamily, ct);
         var gradeRows = new List<ChampionScopeGradeStat>();
 
-        foreach (var scope in GradedScopes)
+        foreach (var scope in RankTierCatalog.PersistedGradeScopes)
         {
             var tiersInScope = RankTierCatalog.ResolveScopeTiers(scope); // null => all tiers (includes UNRANKED)
 
@@ -550,14 +550,15 @@ public partial class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefres
                 .ToDictionary(g => g.Key, g => g.First().BannedMatches);
 
             var score = ChampionTierScorer.ScoreScope(aggregated, banByChampion, totalScopeMatches, _tieringOptions);
+            var hasComparison = scope != RankTierCatalog.MasterPlusScope || previousGrades.Keys.Any(key => key.Scope == scope);
 
             if (AnalyticsQueueCatalog.HasRoles(queueFamily))
             {
                 foreach (var s in score.PerRole)
-                    gradeRows.Add(MapGrade(patch, queueFamily, scope, s.Role, s, computedAt, previousGrades));
+                    gradeRows.Add(MapGrade(patch, queueFamily, scope, s.Role, s, computedAt, previousGrades, hasComparison));
             }
             foreach (var s in score.Overview)
-                gradeRows.Add(MapGrade(patch, queueFamily, scope, OverviewRole, s, computedAt, previousGrades));
+                gradeRows.Add(MapGrade(patch, queueFamily, scope, OverviewRole, s, computedAt, previousGrades, hasComparison));
         }
 
         return gradeRows;
@@ -595,7 +596,8 @@ public partial class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefres
 
     private static ChampionScopeGradeStat MapGrade(
         string patch, string queueFamily, string scope, string roleKey, ChampionTierScorer.ScoredChampion s,
-        DateTime computedAt, IReadOnlyDictionary<(string Scope, string Role, int ChampionId), int> previousGrades)
+        DateTime computedAt, IReadOnlyDictionary<(string Scope, string Role, int ChampionId), int> previousGrades,
+        bool hasComparison)
     {
         int? previousTier = previousGrades.TryGetValue((scope, roleKey, s.ChampionId), out var pt) ? pt : null;
         var movement = previousTier.HasValue
@@ -622,7 +624,7 @@ public partial class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefres
             RoleBaseline = s.RoleBaseline,
             PriorStrength = s.PriorStrength,
             IsLowSample = s.IsLowSample,
-            Movement = movement,
+            Movement = hasComparison ? movement : null,
             PreviousTier = previousTier,
             ComputedAtUtc = computedAt
         };
@@ -644,31 +646,10 @@ public partial class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefres
             .InAnalyticsQueue(queueFamily)
             .WithAnalyticsRole(queueFamily);
 
-    /// <summary>
-    /// Restricts participants to those whose <i>own</i> current solo rank is in the scope, mirroring the
-    /// live <c>ApplyRankTierScopeToParticipants</c> EXISTS form. "ALL" applies no filter (includes unranked).
-    /// </summary>
     private IQueryable<MatchParticipant> ApplyScope(
         IQueryable<MatchParticipant> query,
         string scope,
-        string queueFamily)
-    {
-        if (scope == RankTierCatalog.AllScope)
-            return query;
-
-        var ranks = _context.Ranks.AsNoTracking().InAnalyticsRankQueue(queueFamily);
-
-        if (scope == RankTierCatalog.EmeraldPlusScope)
-        {
-            return query.Where(mp => ranks.Any(r =>
-                r.SummonerId == mp.SummonerId &&
-                RankTierCatalog.EmeraldPlusTiers.Contains(r.Tier)));
-        }
-
-        // Exact tier.
-        return query.Where(mp => ranks.Any(r =>
-            r.SummonerId == mp.SummonerId &&
-            r.Tier == scope));
-    }
+        string queueFamily) => AnalyticsScopeMath.ApplyRankTierScopeToParticipants(
+        query, AnalyticsScopeMath.ParseRankTierScope(scope), _context.Ranks.AsNoTracking(), queueFamily);
 
 }

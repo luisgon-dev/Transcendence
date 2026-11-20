@@ -159,6 +159,37 @@ public class AnalyticsPublicationTests
         (await harness.Publication.ResolveAsync(Solo, "16.17", default)).Selection.State.Should().Be(AnalyticsPatchSelectionState.Unavailable);
     }
 
+    [Fact]
+    public async Task MasterPlus_UsesScopePublicationAndDistinguishesZeroGamesFromPreparing()
+    {
+        await using var harness = await Harness.CreateAsync();
+        AddPatch(harness.Db, "16.13", -14, false);
+        AddPatch(harness.Db, "16.14", 0, true);
+        AddPublication(harness.Db, "16.13", Solo, 80);
+        AddPublication(harness.Db, "16.14", Solo, 60);
+        harness.Db.ScopeMatchCountStats.Add(new ScopeMatchCountStat
+        {
+            Patch = "16.13", QueueFamily = Solo, PlatformRegion = "ALL", RankScope = "MASTER_PLUS", TotalMatches = 12
+        });
+        await harness.Db.SaveChangesAsync();
+
+        (await harness.Publication.ResolveAsync(Solo, null, default)).Selection.EffectivePatch.Should().Be("16.14");
+        (await harness.Publication.ResolveAsync(Solo, null, default, "master+")).Selection.EffectivePatch.Should().Be("16.13");
+        (await harness.Publication.ResolveAsync(Solo, "16.14", default, "MASTER_PLUS")).Selection.State
+            .Should().Be(AnalyticsPatchSelectionState.Preparing);
+        (await harness.Publication.GetPatchOptionsAsync(Solo, default, "MASTER_PLUS"))[1].MatchCount.Should().Be(12);
+
+        harness.Db.ScopeMatchCountStats.Add(new ScopeMatchCountStat
+        {
+            Patch = "16.14", QueueFamily = Solo, PlatformRegion = "ALL", RankScope = "MASTER_PLUS", TotalMatches = 0
+        });
+        await harness.Db.SaveChangesAsync();
+
+        var published = (await harness.Publication.GetPatchOptionsAsync(Solo, default, "MASTER_PLUS"))[0];
+        published.State.Should().Be(AnalyticsPatchSelectionState.Ready);
+        published.MatchCount.Should().Be(0);
+    }
+
     private static Patch AddPatch(TranscendenceContext db, string version, int daysAgo, bool active)
     {
         var patch = new Patch { Version = version, ReleaseDate = DateTime.UtcNow.AddDays(daysAgo), IsActive = active };

@@ -62,7 +62,7 @@ public class ChampionAnalyticsController(
 
         var normalizedQueue = AnalyticsQueueCatalog.Normalize(queue);
         var hasRoles = AnalyticsQueueCatalog.HasRoles(normalizedQueue);
-        var publication = await publicationService.ResolveAsync(normalizedQueue, patch, ct);
+        var publication = await publicationService.ResolveAsync(normalizedQueue, patch, ct, rankTier);
         var selection = publication.Selection;
         if (selection.EffectivePatch == null)
             return Ok(EmptyProfile(championId, hasRoles ? normalizedRole ?? "MIDDLE" : AnalyticsQueueCatalog.AllRoles,
@@ -73,8 +73,8 @@ public class ChampionAnalyticsController(
         var winRates = await analyticsService.GetPublishedWinRatesAsync(championId, filter, publication, ct);
 
         var primaryRole = hasRoles ? normalizedRole ?? ChampionRoleResolver.PickMostPlayed(winRates.ByRoleTier) : null;
-        var rank = rankTier?.Trim().ToUpperInvariant().Replace("+", "_PLUS");
-        if (hasRoles && primaryRole == null && rank != null && rank != RankTierCatalog.AllScope &&
+        var rank = RankTierCatalog.NormalizeScopeToken(rankTier);
+        if (hasRoles && primaryRole == null && rank != RankTierCatalog.AllScope &&
             RankTierCatalog.RankScopeTokens.Contains(rank))
         {
             var allRanks = await analyticsService.GetPublishedWinRatesAsync(
@@ -150,7 +150,7 @@ public class ChampionAnalyticsController(
         int championId, string role, string? rankTier, string? region, string queue, AnalyticsPatchSelection selection)
     {
         var patch = selection.EffectivePatch ?? selection.RequestedPatch ?? selection.ActivePatch ?? "Unknown";
-        var rank = string.IsNullOrWhiteSpace(rankTier) ? RankTierCatalog.AllScope : rankTier.Trim().ToUpperInvariant().Replace("+", "_PLUS");
+        var rank = RankTierCatalog.NormalizeScopeToken(rankTier);
         var regionCode = AnalyticsRegionCatalog.NormalizeOrDefault(region);
         return new ChampionProfileAnalyticsResponse(
             championId,
@@ -204,7 +204,7 @@ public class ChampionAnalyticsController(
     /// Data is cached for 24 hours.
     /// </summary>
     /// <param name="championId">Champion ID (e.g., 1 for Annie)</param>
-    /// <param name="rankTier">Optional rank tier filter (ALL, EMERALD_PLUS, IRON, BRONZE, SILVER, GOLD, PLATINUM, EMERALD, DIAMOND, MASTER, GRANDMASTER, CHALLENGER)</param>
+    /// <param name="rankTier">Optional rank tier filter (ALL, EMERALD_PLUS, MASTER_PLUS, or an individual tier from IRON through CHALLENGER)</param>
     /// <param name="region">Optional region filter (e.g., NA1, EUW1)</param>
     /// <param name="role">Optional role filter (TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY)</param>
     /// <param name="patch">Optional patch version. Defaults to the active analytics patch.</param>

@@ -44,7 +44,7 @@ export type BuildLabCoverage = {
 
 export type BuildLabContext = {
   championId: number;
-  role: string;
+  role: string | null;
   opponentChampionId?: number | null;
   requestedPatch?: string | null;
   requestedRegion: string;
@@ -102,7 +102,7 @@ export type BuildLabResponse = {
 };
 
 export type BuildLabState = {
-  role: BuildLabRole;
+  role?: BuildLabRole;
   opponentChampionId?: number;
   patch?: string;
   region?: string;
@@ -219,10 +219,7 @@ export function hasBuildLabSelection(state: BuildLabState) {
 export function normalizeBuildLabState(
   searchParams: Record<string, string | string[] | undefined>
 ): { state: BuildLabState; issues: string[] } {
-  const roleValue = String(searchParams.role ?? "MIDDLE").toUpperCase();
-  const role = BUILD_LAB_ROLES.includes(roleValue as BuildLabRole)
-    ? (roleValue as BuildLabRole)
-    : "MIDDLE";
+  const role = normalizeBuildLabRole(searchParams.role);
   const sectionValue = String(searchParams.section ?? "items").toLowerCase();
   const section = BUILD_LAB_SECTIONS.includes(sectionValue as BuildLabSection)
     ? (sectionValue as BuildLabSection)
@@ -261,8 +258,21 @@ export function normalizeBuildLabState(
   };
 }
 
+export function normalizeBuildLabRole(value: unknown) {
+  const normalized = typeof value === "string" ? value.trim().toUpperCase() : undefined;
+  return BUILD_LAB_ROLES.find((role) => role === normalized);
+}
+
+export function readBuildLabUrl(query: Pick<URLSearchParams, "keys" | "getAll">) {
+  return normalizeBuildLabState(Object.fromEntries([...new Set(query.keys())].map((key) => {
+    const values = query.getAll(key);
+    return [key, values.length === 1 ? values[0] : values];
+  })));
+}
+
 function contextQuery(state: BuildLabState) {
-  const query = new URLSearchParams({ role: state.role, section: state.section, mode: state.mode });
+  const query = new URLSearchParams({ section: state.section, mode: state.mode });
+  if (state.role) query.set("role", state.role);
   if (state.opponentChampionId) query.set("opponentChampionId", String(state.opponentChampionId));
   if (state.patch) query.set("patch", state.patch);
   if (state.region && state.region !== "ALL") query.set("region", state.region);
@@ -295,6 +305,18 @@ export function buildLabRequestQuery(state: BuildLabState) {
 
 export function buildLabPermalink(championId: number, state: BuildLabState) {
   return `/lol/builds/${championId}?${buildLabQuery(state).toString()}`;
+}
+
+export function buildLabChampionHref(
+  championId: number,
+  { role, patch, region }: { role?: string; patch?: string | null; region?: string | null } = {}
+) {
+  const query = new URLSearchParams();
+  const lane = normalizeBuildLabRole(role);
+  if (lane) query.set("role", lane);
+  if (patch) query.set("patch", patch);
+  if (region && region !== "ALL") query.set("region", region);
+  return `/lol/builds/${championId}${query.size ? `?${query}` : ""}`;
 }
 
 const REGION_LABELS: Record<string, string> = {

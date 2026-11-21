@@ -257,9 +257,10 @@ activity can make low-priority backups take longer.
 
 Each backup validates data-file checksums with `pg_verifybackup`, validates the included WAL with
 `pg_waldump`, uploads encrypted artifacts, checks restic, and reads back the manifest. Only then is
-the snapshot tagged verified and eligible as the next incremental's parent. Retention keeps two
+the snapshot tagged verified and eligible as the next incremental's parent. Retention planning preserves two
 complete full-plus-incremental chains, including every dependency; unknown/missing/cyclic metadata
-fails closed. Legacy logical snapshots and separate match archives are excluded from this policy.
+fails closed. No snapshots are deleted by this job. Legacy logical snapshots and separate match
+archives are excluded from this policy.
 
 Install native units from the verified release bundle after a successful release:
 
@@ -424,3 +425,35 @@ switches the user's existing proxy or backup destination.
 The [production host configuration](PRODUCTION-HOST.md) records the adopted LXC
 addresses, dedicated Unraid repository, recovery password location and isolated
 restore workspace. Verify live state before reusing that dated host inventory.
+
+
+### Native PostgreSQL recovery image and retention
+
+Native backups require Docker's containerd image store and platform-aware
+inspection (Engine API 1.49+). The running server's OCI index and its linux/amd64
+child must resolve locally from the Docker Official PostgreSQL repository. Image
+metadata records both; the known historical index maps to its independently
+verified amd64 child for pre-existing snapshots. An unknown historical index
+without recorded child information must be verified and mapped before restore.
+
+Before any restore drill, pre-stage the snapshot's exact OCI index into the
+**restore daemon** (not merely the production daemon), with its complete
+linux/amd64 content. Verify the index RepoDigest and the platform child using
+local Docker inspection. Use an approved immutable pull or an archive/import that
+preserves both descriptors and the official reference. Restore never pulls and
+does not fall back to a mutable tag. Archive such recovery images separately
+from the database and retain them as long as any snapshot depends on them.
+After verifying the immutable reference, give that exact index a local retention
+tag (for example, `transcendence-recovery/postgres:sha256-<full index hash>`)
+in each daemon. Default dangling-only image pruning keeps tagged images. Do not
+include retention tags in broad `docker image prune --all` or system cleanups;
+the local tag is protection only, never a restore identity.
+
+Routine backups report retention candidates and do not run forget or prune.
+Validate the current verified dependency graph and obtain approval for a separate
+retention operation. Monitor backup repository free space while expiration is manual.
+
+Changing the Compose image reference does not affect a running service until
+Compose is applied to PostgreSQL. Adopt that pin in a planned deployment; do not
+recreate PostgreSQL solely to restore backup tooling. A future digest change
+requires an explicitly planned full baseline, not a silent incremental reset.

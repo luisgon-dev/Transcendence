@@ -8,7 +8,7 @@ services:
   postgres:
     # PostgreSQL 18 uses the existing /var/lib/postgresql/18/docker data directory.
     # Major upgrades require an explicit migration; retain a clean backup for rollback.
-    image: postgres:18.7-alpine
+    image: postgres:18.7-alpine@sha256:75dcac3dfb1cd01ca3536910bbc84128759362f8b118bf8c55b38a94f68f3b73
     container_name: transcendence-postgres
     labels:
       wud.watch: "false"

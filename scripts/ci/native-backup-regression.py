@@ -30,7 +30,7 @@ def main():
     common = module('common_backup', ROOT / 'scripts/ops/release_backup.py')
     native = module('native_backup', ROOT / 'scripts/ops/release_pg_backup.py')
     container = 'trn-native-source-' + secrets.token_hex(6)
-    image = 'postgres:18.7-alpine'
+    image = native.OFFICIAL + '@' + native.CURRENT_INDEX
     with tempfile.TemporaryDirectory(dir=args.workspace) as temporary:
         root = Path(temporary)
         password = root / 'password'
@@ -44,8 +44,23 @@ def main():
                           TRN_BACKUP_APP_ENV_FILE=str(environment), TRN_BACKUP_SKIP_RECENT_FULL_SECONDS='0',
                           PATH=str(args.restic.resolve().parent) + os.pathsep + os.environ['PATH'])
         common.run(['restic', 'init'])
+        # The fixture acquisition is explicit and separate from offline backup and restore.
+        common.run(['docker', 'pull', '--platform', native.PLATFORM, image])
+        docker = shutil.which('docker')
+        guard = root / 'docker'
+        guard.write_text(
+            '#!/bin/sh\n'
+            'if [ "$1" = pull ]; then echo "Unexpected upstream pull" >&2; exit 91; fi\n'
+            'if [ "$1" = run ] || [ "$1" = create ]; then\n'
+            '  found=; for arg; do [ "$arg" != "--pull=never" ] || found=1; done\n'
+            '  [ "$found" = 1 ] || { echo "Implicit pull not allowed" >&2; exit 92; }\n'
+            'fi\n'
+            'exec "$TRN_FIXTURE_DOCKER" "$@"\n')
+        guard.chmod(0o700)
+        os.environ['TRN_FIXTURE_DOCKER'] = docker
+        os.environ['PATH'] = str(root) + os.pathsep + os.environ['PATH']
         try:
-            common.run(['docker', 'run', '-d', '--name', container, '--network', 'none', '--memory', '512m', '--cpus', '1',
+            common.run(['docker', 'run', '--pull=never', '--platform', native.PLATFORM, '-d', '--name', container, '--network', 'none', '--memory', '512m', '--cpus', '1',
                         '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', '-e', 'POSTGRES_DB=backup_fixture', image,
                         '-c', 'summarize_wal=on', '-c', 'checkpoint_timeout=30s', '-c', 'checkpoint_completion_target=0.1'])
             for _ in range(60):

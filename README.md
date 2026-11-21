@@ -602,7 +602,7 @@ Web process liveness is `/api/health`; asset readiness is `/api/readiness`.
 Production requires an explicit public origin, backend settings and a trusted
 private proxy boundary. See the deployment instructions in `docs/DEVELOPMENT.md`.
 
-PostgreSQL uses `postgres:18.7-alpine` with the existing parent volume at
+PostgreSQL uses the Docker Official 18.7 Alpine image pinned by OCI index, with the existing parent volume at
 `/var/lib/postgresql` and data in `18/docker`. Patch updates retain that layout;
 major upgrades require an explicit migration and a clean database backup or snapshot.
 Redis 8 retains its existing append-only data and DataProtection keys.

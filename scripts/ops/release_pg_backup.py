@@ -20,6 +20,29 @@ TAG = "transcendence-postgres-native"
 METADATA = "native-backup.json"
 SNAPSHOT_ID = re.compile(r"[0-9a-f]{64}")
 LSN = re.compile(r"[0-9A-F]+/[0-9A-F]+")
+DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+PLATFORM = "linux/amd64"
+OFFICIAL = "docker.io/library/postgres"
+OCI_INDEX = "application/vnd.oci.image.index.v1+json"
+OCI_MANIFEST = "application/vnd.oci.image.manifest.v1+json"
+CURRENT_INDEX = "sha256:75dcac3dfb1cd01ca3536910bbc84128759362f8b118bf8c55b38a94f68f3b73"
+LEGACY_CHILDREN = {
+    (CURRENT_INDEX, PLATFORM):
+        "sha256:fa1b61f5a4844f4d4b73c9b15716cfc75fe70c931f2d32723630f3b900056366",
+}
+
+
+def image_identity(info):
+    repo, sep, index = info["image"].partition("@")
+    platform = info["platform"]
+    if not sep or repo not in ("postgres", OFFICIAL) or not DIGEST.fullmatch(index):
+        raise ValueError("Expected an immutable Docker Official PostgreSQL repository digest")
+    child = info.get("image_manifest", LEGACY_CHILDREN.get((index, platform)))
+    if platform != PLATFORM or not isinstance(child, str) or not DIGEST.fullmatch(child):
+        raise ValueError("Expected a known linux/amd64 PostgreSQL child manifest")
+    if (index, platform) in LEGACY_CHILDREN and child != LEGACY_CHILDREN[index, platform]:
+        raise ValueError("Unexpected child manifest for the known PostgreSQL index")
+    return index, platform, child
 
 
 def setting(name, default, minimum, maximum):
@@ -132,14 +155,42 @@ class NativeBackups:
             raise ValueError("Native backups require PostgreSQL 18+ with summarize_wal enabled before the full baseline")
         if info["tablespaces"] != 0:
             raise ValueError("Native backup tooling currently supports the default PostgreSQL tablespaces only")
-        image_id = self.call(["docker", "inspect", "--format", "{{.Image}}", self.container]).decode().strip()
-        image = json.loads(self.call(["docker", "image", "inspect", "--format", "{{json .RepoDigests}}", image_id]))
-        if not image or not any("@sha256:" in value for value in image):
-            raise ValueError("The PostgreSQL image must have an immutable registry digest")
-        info["image"] = image[0]
-        info["platform"] = self.call(["docker", "image", "inspect", "--format",
-                                      "{{.Os}}/{{.Architecture}}", image_id]).decode().strip()
+        running, = json.loads(self.call(["docker", "container", "inspect", "--format",
+            '[{"Image":{{json .Image}},"ImageManifestDescriptor":{{json .ImageManifestDescriptor}}}]',
+            self.container]))
+        child = running.get("ImageManifestDescriptor") or {}
+        platform = child.get("platform") or {}
+        info.update(image="postgres@" + running["Image"], image_manifest=child.get("digest"),
+                    platform=f"{platform.get('os')}/{platform.get('architecture')}")
+        self.cached_image(info)
         return info
+
+    def cached_image(self, info):
+        index, platform, child = image_identity(info)
+        reference = OFFICIAL + "@" + index
+
+        def inspect(*args):
+            return json.loads(self.call(["docker", "image", "inspect", *args, reference,
+                                         "--format", "{{json .}}"]))
+
+        try:
+            root = inspect()
+            selected = inspect("--platform", platform)
+        except (RuntimeError, subprocess.CalledProcessError) as error:
+            raise RuntimeError("Exact PostgreSQL image is unavailable locally; pre-stage the official index and platform") from error
+        descriptor = root.get("Descriptor") or {}
+        if (descriptor.get("digest") != index or descriptor.get("mediaType") != OCI_INDEX
+                or not {"postgres@" + index, reference}.intersection(root.get("RepoDigests") or [])):
+            raise ValueError("Cached PostgreSQL image does not match the official OCI index")
+        manifest = selected.get("Descriptor") or {}
+        annotations = manifest.get("annotations") or {}
+        if (manifest.get("digest") != child or manifest.get("mediaType") != OCI_MANIFEST
+                or (selected.get("Os"), selected.get("Architecture")) != ("linux", "amd64")
+                or annotations.get("org.opencontainers.image.url") != "https://hub.docker.com/_/postgres"
+                or not annotations.get("org.opencontainers.image.source", "").startswith(
+                    "https://github.com/docker-library/postgres.git#")):
+            raise ValueError("Cached PostgreSQL image does not match the recorded official platform manifest")
+        return reference
 
     def catalog(self, system=None, host=None):
         args = ["restic", "snapshots", "--json", "--tag", TAG,
@@ -166,7 +217,7 @@ class NativeBackups:
         return info
 
     def tool(self, image, directory, arguments, network="none", name=None):
-        command = ["docker", "run", "--rm", "--read-only", "--cap-drop", "ALL",
+        command = ["docker", "run", "--pull=never", "--platform", PLATFORM, "--rm", "--read-only", "--cap-drop", "ALL",
                    "--security-opt", "no-new-privileges", "--pids-limit", "64",
                    "--cpus", "1", "--memory", "512m", "--user", f"{os.getuid()}:{os.getgid()}",
                    "--network", network, "--tmpfs", "/tmp:rw,noexec,nosuid,size=16m",
@@ -237,7 +288,7 @@ class NativeBackups:
                         "--manifest-checksums", "SHA256", "--label", application, "--no-password"]
                 if not full:
                     previous = self.read_metadata(parent)
-                    if (previous["image"] != source["image"] or previous["checksums"] != source["checksums"]
+                    if (image_identity(previous) != image_identity(source) or previous["checksums"] != source["checksums"]
                             or previous["version"] // 10000 != source["version"] // 10000):
                         raise ValueError("PostgreSQL image/version/checksums changed; take an explicit new full baseline")
                     reference = directory / "reference-manifest.json"
@@ -308,7 +359,7 @@ class NativeBackups:
                 result_snapshot = verified[0]["id"]
                 expired = retention(current, setting("TRN_BACKUP_KEEP_FULL_CHAINS", "2", 1, 12))
                 if expired:
-                    self.call(["restic", "forget", "--prune"] + expired)
+                    print(f"Retention reports {len(expired)} eligible snapshots; no snapshots removed", flush=True)
                 # Persist useful sizes, never database contents or credentials.
                 receipt = dict(info, snapshot=result_snapshot)
                 (self.state / "last-native-backup.json").write_text(json.dumps(receipt, indent=2) + "\n")
@@ -348,9 +399,10 @@ class NativeBackups:
             item = records[parent]
         chain.reverse()
         final = chain[-1][1]
-        if any(info["image"] != final["image"] or info["platform"] != final["platform"]
+        if any(image_identity(info) != image_identity(final)
                or info["checksums"] != final["checksums"] for _, info in chain):
             raise ValueError("Native backup chain crosses PostgreSQL image or architecture boundaries")
+        image = self.cached_image(final)
         manifests = []
         required = int(final["bytes"]) + self.reserve
         for item, info in chain:
@@ -365,7 +417,6 @@ class NativeBackups:
             manifests.append(raw)
         if shutil.disk_usage(self.state).free < required:
             raise RuntimeError("Insufficient recovery workspace; use an off-host filesystem with more headroom")
-        self.call(["docker", "pull", "--platform", final["platform"], final["image"]])
         container = "trn-native-restore-" + secrets.token_hex(6)
         observation = None
         with tempfile.TemporaryDirectory(dir=self.state, prefix="native-restore-") as working:
@@ -383,7 +434,7 @@ class NativeBackups:
                         raise RuntimeError("Could not retrieve native backup artifacts")
                 if (download / "backup_manifest").read_bytes() != manifest:
                     raise RuntimeError("Recovery manifest changed during retrieval")
-                self.verify(final["image"], download)
+                self.verify(image, download)
                 data = working / f"input-{index}"
                 data.mkdir()
                 safe_extract(download / "base.tar.gz", data)
@@ -394,19 +445,19 @@ class NativeBackups:
                 shutil.rmtree(download)
                 inputs.append(data)
             output = working / "combined"
-            self.call(self.tool(final["image"], working,
+            self.call(self.tool(image, working,
                                 ["pg_combinebackup", "--output", str(output)] + [str(path) for path in inputs]))
-            self.call(self.tool(final["image"], working, ["pg_verifybackup", "--exit-on-error", str(output)]))
+            self.call(self.tool(image, working, ["pg_verifybackup", "--exit-on-error", str(output)]))
             hba = working / "test-hba.conf"
             hba.write_text("local all all trust\n")
             hba.chmod(0o444)
             try:
-                self.call(["docker", "run", "-d", "--name", container, "--platform", final["platform"],
+                self.call(["docker", "run", "--pull=never", "-d", "--name", container, "--platform", final["platform"],
                            "--network", "none", "--cpus", "1", "--memory", "2g", "--pids-limit", "128",
                            "--security-opt", "no-new-privileges", "--env", "PGDATA=/pgdata",
                            "--mount", f"type=bind,src={output},dst=/pgdata",
                            "--mount", f"type=bind,src={hba},dst=/run/test-hba.conf,readonly",
-                           final["image"], "postgres", "-c", "listen_addresses=", "-c", "unix_socket_directories=/tmp",
+                           image, "postgres", "-c", "listen_addresses=", "-c", "unix_socket_directories=/tmp",
                            "-c", "hba_file=/run/test-hba.conf", "-c", "archive_mode=off",
                            "-c", "summarize_wal=off", "-c", "autovacuum=off"])
                 for _ in range(300):
@@ -445,10 +496,10 @@ class NativeBackups:
                 if os.getuid() != 0:
                     # The official image gives PGDATA to its postgres UID. Return
                     # only this disposable bind directory to a non-root operator.
-                    self.call(["docker", "run", "--rm", "--network", "none", "--read-only", "--user", "0:0",
+                    self.call(["docker", "run", "--pull=never", "--platform", PLATFORM, "--rm", "--network", "none", "--read-only", "--user", "0:0",
                                "--cap-drop", "ALL", "--cap-add", "CHOWN", "--cap-add", "DAC_OVERRIDE",
                                "--cpus", "1", "--memory", "256m", "--mount", f"type=bind,src={working},dst={working}",
-                               final["image"], "chown", "-R", f"{os.getuid()}:{os.getgid()}", str(working)])
+                               image, "chown", "-R", f"{os.getuid()}:{os.getgid()}", str(working)])
         receipt = self.state / "last-native-restore.json"
         receipt.write_text(json.dumps(observation, indent=2) + "\n")
         receipt.chmod(0o600)

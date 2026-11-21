@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Real full + changed-block + changed-block + encrypted off-host-style recovery."""
 import argparse
+from contextlib import contextmanager
+import grp
 import importlib.util
 import json
 import os
@@ -20,6 +22,52 @@ def module(name, path):
     result = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(result)
     return result
+
+
+
+@contextmanager
+def cold_restore_daemon(root, docker):
+    """Start the checked-in restore configuration in a separate network namespace."""
+    runtime = root / "restore-daemon"
+    runtime.mkdir()
+    config = json.loads((ROOT / "config/deploy/restore-docker.json").read_text())
+    endpoint = "unix://" + str(runtime / "daemon.sock")
+    pidfile = runtime / "daemon.pid"
+    config.update({"data-root": str(runtime / "data"), "exec-root": str(runtime / "exec"),
+                   "pidfile": str(pidfile), "hosts": [endpoint], "group": grp.getgrgid(os.getgid()).gr_name})
+    fixture_config = runtime / "daemon.json"
+    fixture_config.write_text(json.dumps(config))
+    dockerd = shutil.which("dockerd")
+    if not dockerd:
+        raise RuntimeError("Fixture requires the isolated CI Docker Engine binary")
+    # sudo's restricted PATH would otherwise pick the runner's unrelated containerd/runc.
+    runtime_path = f"{Path(dockerd).parent}:/usr/sbin:/usr/bin:/sbin:/bin"
+    with (runtime / "daemon.log").open("wb") as log:
+        daemon = subprocess.Popen(["sudo", "-n", "env", "PATH=" + runtime_path, "unshare", "--net",
+                                   dockerd, "--config-file", str(fixture_config)],
+                                  stdout=log, stderr=subprocess.STDOUT)
+        try:
+            for _ in range(45):
+                if daemon.poll() is not None:
+                    raise RuntimeError("Isolated Docker daemon exited")
+                if subprocess.run([docker, "--host", endpoint, "info"], capture_output=True, timeout=10).returncode == 0:
+                    break
+                time.sleep(1)
+            else:
+                raise RuntimeError("Isolated Docker daemon failed to become ready")
+            yield endpoint
+        except Exception:
+            print((runtime / "daemon.log").read_text(errors="replace")[-4096:], flush=True)
+            raise
+        finally:
+            if daemon.poll() is None and pidfile.is_file():
+                subprocess.run(["sudo", "-n", "kill", "-TERM", pidfile.read_text().strip()], check=True, timeout=15)
+            try:
+                daemon.wait(timeout=60)
+            finally:
+                # Only the new fixture daemon directory, never existing Docker state.
+                subprocess.run(["sudo", "-n", "chown", "-R", f"{os.getuid()}:{os.getgid()}", str(runtime)],
+                               check=True, timeout=60)
 
 
 def main():
@@ -46,6 +94,10 @@ def main():
         common.run(['restic', 'init'])
         # The fixture acquisition is explicit and separate from offline backup and restore.
         common.run(['docker', 'pull', '--platform', native.PLATFORM, image])
+        retention_tag = native.recovery_tag(native.CURRENT_INDEX)
+        common.run(['docker', 'image', 'tag', image, retention_tag])
+        archive = root / 'postgres-recovery.tar'
+        common.run(['docker', 'image', 'save', '--output', str(archive), retention_tag])
         docker = shutil.which('docker')
         guard = root / 'docker'
         guard.write_text(
@@ -98,7 +150,29 @@ def main():
                 THEN RAISE EXCEPTION 'Native incremental data did not recover'; END IF;
                 END $$;''')
             os.environ['TRN_RESTORE_ACCEPTANCE_SQL_FILE'] = str(acceptance)
-            observation = engine.restore(socket.gethostname(), second)
+            source_host = os.environ.get('DOCKER_HOST')
+            source_context = os.environ.pop('DOCKER_CONTEXT', None)
+            try:
+                with cold_restore_daemon(root, docker) as endpoint:
+                    os.environ['DOCKER_HOST'] = endpoint
+                    # The cold daemon must refuse a restore until the exact artifact is imported.
+                    try:
+                        engine.restore(socket.gethostname(), second)
+                    except RuntimeError as error:
+                        assert 'Exact PostgreSQL image is unavailable locally' in str(error), error
+                    else:
+                        raise AssertionError('Cold restore unexpectedly succeeded with no image')
+                    assert not (state / 'last-native-restore.json').exists()
+                    assert not list(state.glob('native-restore-*'))
+                    common.run(['docker', 'image', 'load', '--input', str(archive)])
+                    observation = engine.restore(socket.gethostname(), second)
+            finally:
+                if source_host is None:
+                    os.environ.pop('DOCKER_HOST', None)
+                else:
+                    os.environ['DOCKER_HOST'] = source_host
+                if source_context is not None:
+                    os.environ['DOCKER_CONTEXT'] = source_context
             assert observation['chain_length'] == 3 and observation['summoners'] == 1
             recovered = common.run(['restic', 'dump', second, str(environment)])
             assert recovered == environment.read_bytes()
@@ -107,7 +181,8 @@ def main():
             assert (root / 'metrics/database_restore_drill.prom').is_file()
             print(json.dumps(dict(full=full, first_incremental=first, second_incremental=second,
                                   full_artifact_bytes=full_bytes, incremental_artifact_bytes=latest['artifact_bytes'],
-                                  restored=observation, environment_exact=True)))
+                                  restored=observation, environment_exact=True,
+                                  cold_cache_refused=True, restored_from_offline_archive=True)))
         except Exception:
             # This repository/database contains only synthetic fixture data.
             diagnostic = root / 'state/last-command.log'

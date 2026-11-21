@@ -32,6 +32,10 @@ LEGACY_CHILDREN = {
 }
 
 
+def recovery_tag(index):
+    return "transcendence-recovery/postgres:" + index.replace(":", "-", 1)
+
+
 def image_identity(info):
     repo, sep, index = info["image"].partition("@")
     platform = info["platform"]
@@ -165,23 +169,38 @@ class NativeBackups:
         self.cached_image(info)
         return info
 
-    def cached_image(self, info):
+    def cached_image(self, info, recovery=False):
         index, platform, child = image_identity(info)
         reference = OFFICIAL + "@" + index
 
-        def inspect(*args):
-            return json.loads(self.call(["docker", "image", "inspect", *args, reference,
+        def inspect(locator, *args):
+            return json.loads(self.call(["docker", "image", "inspect", *args, locator,
                                          "--format", "{{json .}}"]))
 
+        # A portable archive may restore a local reference but not a RepoDigest.
+        # Only recovery may use the content address directly; creating backups
+        # still requires the official RepoDigest linked to the running container.
+        direct = False
         try:
-            root = inspect()
-            selected = inspect("--platform", platform)
+            root = inspect(reference)
         except (RuntimeError, subprocess.CalledProcessError) as error:
-            raise RuntimeError("Exact PostgreSQL image is unavailable locally; pre-stage the official index and platform") from error
+            if not recovery:
+                raise RuntimeError("Exact PostgreSQL image is unavailable locally; pre-stage the official index and platform") from error
+            try:
+                root = inspect(index)
+            except (RuntimeError, subprocess.CalledProcessError) as missing:
+                raise RuntimeError("Exact PostgreSQL image is unavailable locally; pre-stage the official index and platform") from missing
+            direct = True
         descriptor = root.get("Descriptor") or {}
         if (descriptor.get("digest") != index or descriptor.get("mediaType") != OCI_INDEX
-                or not {"postgres@" + index, reference}.intersection(root.get("RepoDigests") or [])):
+                or (direct and root.get("Id") != index)
+                or (not direct and not {"postgres@" + index, reference}.intersection(root.get("RepoDigests") or []))):
             raise ValueError("Cached PostgreSQL image does not match the official OCI index")
+        locator = index if direct else reference
+        try:
+            selected = inspect(locator, "--platform", platform)
+        except (RuntimeError, subprocess.CalledProcessError) as error:
+            raise RuntimeError("The exact PostgreSQL platform must be available locally") from error
         manifest = selected.get("Descriptor") or {}
         annotations = manifest.get("annotations") or {}
         if (manifest.get("digest") != child or manifest.get("mediaType") != OCI_MANIFEST
@@ -190,7 +209,7 @@ class NativeBackups:
                 or not annotations.get("org.opencontainers.image.source", "").startswith(
                     "https://github.com/docker-library/postgres.git#")):
             raise ValueError("Cached PostgreSQL image does not match the recorded official platform manifest")
-        return reference
+        return locator
 
     def catalog(self, system=None, host=None):
         args = ["restic", "snapshots", "--json", "--tag", TAG,
@@ -402,7 +421,7 @@ class NativeBackups:
         if any(image_identity(info) != image_identity(final)
                or info["checksums"] != final["checksums"] for _, info in chain):
             raise ValueError("Native backup chain crosses PostgreSQL image or architecture boundaries")
-        image = self.cached_image(final)
+        image = self.cached_image(final, recovery=True)
         manifests = []
         required = int(final["bytes"]) + self.reserve
         for item, info in chain:

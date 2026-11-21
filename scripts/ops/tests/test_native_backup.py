@@ -48,6 +48,23 @@ class NativeImageTests(unittest.TestCase):
                  patch.object(native.os, "getgid", create=True, return_value=0):
                 self.assertIn("--pull=never", engine.tool(official, tmp, ["pg_verifybackup"]))
 
+    def test_offline_archive_uses_content_address_never_a_tag(self):
+        info, _, root, child = self.fixture()
+        root.update(Id=self.index, RepoDigests=[])
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = native.NativeBackups(Mock(), tmp)
+            with patch.object(engine, "call", side_effect=[
+                RuntimeError("official reference not retained by archive"), json.dumps(root), json.dumps(child)
+            ]) as call:
+                self.assertEqual(engine.cached_image(info, recovery=True), self.index)
+                self.assertEqual(call.call_args_list[1].args[0][3], self.index)
+                self.assertEqual(call.call_args_list[2].args[0][5], self.index)
+            root["Id"] = self.child
+            with patch.object(engine, "call", side_effect=[
+                RuntimeError("official reference unavailable"), json.dumps(root)
+            ]), self.assertRaisesRegex(ValueError, "official OCI index"):
+                engine.cached_image(info, recovery=True)
+
     def test_rejects_untrusted_references_and_unknown_legacy_indexes_without_docker(self):
         info, _, _, _ = self.fixture()
         for invalid in (dict(info, image="postgres:18.7-alpine"),

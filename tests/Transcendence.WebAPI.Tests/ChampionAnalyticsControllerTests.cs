@@ -132,8 +132,8 @@ public class ChampionAnalyticsControllerTests
     private static IAnalyticsPublicationService ReadyPublication()
     {
         var service = new Mock<IAnalyticsPublicationService>();
-        service.Setup(x => x.ResolveAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string _, string? requested, CancellationToken _) =>
+        service.Setup(x => x.ResolveAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>(), It.IsAny<string?>()))
+            .ReturnsAsync((string _, string? requested, CancellationToken _, string? _) =>
                 new AnalyticsPublication(new(AnalyticsPatchSelectionState.Ready, "15.2", requested, "15.1")));
         return service.Object;
     }

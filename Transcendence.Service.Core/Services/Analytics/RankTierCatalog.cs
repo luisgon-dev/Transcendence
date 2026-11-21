@@ -1,16 +1,12 @@
 namespace Transcendence.Service.Core.Services.Analytics;
 
 /// <summary>
-/// Canonical rank-tier groupings shared across the LoL analytics services. The Emerald+ set is the
-/// default "high-elo" analytics scope; it was previously copy-pasted as an inline <c>|| </c>-chain in
-/// several places (the LoL analytics compute services). Exposed as a list so EF Core
-/// translates <c>EmeraldPlusTiers.Contains(tier)</c> to a SQL <c>IN (...)</c> — equivalent to the chain.
+/// Canonical rank-tier groupings shared across LoL analytics reads and materialization.
 /// </summary>
 public static class RankTierCatalog
 {
-    /// <summary>Solo-queue tiers that make up the "Emerald and above" scope (used for ordering too: highest elo last).</summary>
-    public static readonly IReadOnlyList<string> EmeraldPlusTiers =
-        ["EMERALD", "DIAMOND", "MASTER", "GRANDMASTER", "CHALLENGER"];
+    private static readonly IReadOnlyList<string> MasterPlusTiers = ["MASTER", "GRANDMASTER", "CHALLENGER"];
+    private static readonly IReadOnlyList<string> EmeraldPlusTiers = ["EMERALD", "DIAMOND", .. MasterPlusTiers];
 
     /// <summary>All individual competitive solo-queue tiers, low → high (the modern ladder includes PLATINUM).</summary>
     public static readonly IReadOnlyList<string> AllTiers =
@@ -22,29 +18,33 @@ public static class RankTierCatalog
     /// <summary>Unfiltered rank scope (includes unranked participants/matches).</summary>
     public const string AllScope = "ALL";
 
-    /// <summary>High-elo composite scope token.</summary>
     public const string EmeraldPlusScope = "EMERALD_PLUS";
+    public const string MasterPlusScope = "MASTER_PLUS";
 
     /// <summary>
-    /// Rank-scope tokens the analytics surface can request — and that the refresh job precomputes the
-    /// distinct-match (ban-rate) denominators for: the unfiltered <see cref="AllScope"/>, the high-elo
-    /// <see cref="EmeraldPlusScope"/> composite, and every exact tier. Mirrors <c>ParseRankTierScope</c>
-    /// in <c>AnalyticsScopeMath</c> (which normalizes "EMERALD+" → "EMERALD_PLUS").
+    /// Rank scopes with persisted all-region tier grades and trends.
     /// </summary>
+    public static readonly IReadOnlyList<string> PersistedGradeScopes = [AllScope, EmeraldPlusScope, MasterPlusScope];
+
+    /// <summary>Rank scopes with precomputed distinct-match and ban counts.</summary>
     public static readonly IReadOnlyList<string> RankScopeTokens =
-        [AllScope, EmeraldPlusScope, .. AllTiers];
+        [.. PersistedGradeScopes, .. AllTiers];
+
+    public static string NormalizeScopeToken(string? rankTier) => string.IsNullOrWhiteSpace(rankTier)
+        ? AllScope
+        : rankTier.Trim().ToUpperInvariant().Replace("+", "_PLUS");
 
     /// <summary>
     /// The individual <c>RankTier</c> values a scope token covers, for rolling up
     /// <c>ChampionRoleTierStat</c> rows. <see cref="AllScope"/> returns <c>null</c> (no tier filter —
-    /// includes <see cref="Unranked"/>); <see cref="EmeraldPlusScope"/> returns the high tiers; an exact
-    /// tier returns just itself.
+    /// includes <see cref="Unranked"/>); a composite returns its tiers and an exact tier returns itself.
     /// </summary>
     public static IReadOnlyList<string>? ResolveScopeTiers(string scopeToken) =>
         scopeToken switch
         {
             AllScope => null,
             EmeraldPlusScope => EmeraldPlusTiers,
+            MasterPlusScope => MasterPlusTiers,
             _ => [scopeToken],
         };
 }

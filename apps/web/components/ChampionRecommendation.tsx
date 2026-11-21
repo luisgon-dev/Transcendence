@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import {
+  buildLabChampionHref,
   formatCompactCount,
   formatLift,
   formatPercent,
@@ -110,9 +111,6 @@ export function ChampionRecommendation({
   spellVersion: string;
   spells: Record<string, { id: string; name: string }>;
 }) {
-  const query = new URLSearchParams({ role });
-  if (patch) query.set("patch", patch);
-  if (region && region !== "ALL") query.set("region", region);
   const summary = recommendation.summary;
   const core = summary?.items ?? [];
   const runePage = summary?.runePage;
@@ -144,7 +142,7 @@ export function ChampionRecommendation({
           </p>
         </div>
         <Link
-          href={`/lol/builds/${championId}?${query.toString()}`}
+          href={buildLabChampionHref(championId, { role, patch, region })}
           className="shrink-0 text-sm font-semibold text-primary hover:underline"
         >
           Explore in Build Lab

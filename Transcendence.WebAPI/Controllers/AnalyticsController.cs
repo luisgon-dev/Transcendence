@@ -24,7 +24,7 @@ public class AnalyticsController(
     /// Data is cached for 24 hours.
     /// </summary>
     /// <param name="role">Optional role filter (TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY). Leave empty for unified tier list across all roles.</param>
-    /// <param name="rankTier">Optional rank tier filter (ALL, EMERALD_PLUS, IRON, BRONZE, SILVER, GOLD, PLATINUM, EMERALD, DIAMOND, MASTER, GRANDMASTER, CHALLENGER)</param>
+    /// <param name="rankTier">Optional rank tier filter (ALL, EMERALD_PLUS, MASTER_PLUS, or an individual tier from IRON through CHALLENGER)</param>
     /// <param name="region">Optional platform region filter (for example NA1, EUW1, KR). Defaults to ALL/global.</param>
     /// <param name="queue">Optional queue family. Defaults to ranked solo/duo.</param>
     /// <param name="patch">Optional patch version. Defaults to the newest published patch for the queue.</param>
@@ -42,7 +42,7 @@ public class AnalyticsController(
         if (!AnalyticsQueueCatalog.IsSupported(queue))
             return BadRequest("Invalid queue. Expected solo, aram, arena, or flex.");
 
-        var publication = await publicationService.ResolveAsync(queue, patch, ct);
+        var publication = await publicationService.ResolveAsync(queue, patch, ct, rankTier);
         var tierList = await analyticsService.GetPublishedTierListAsync(role, rankTier, region, queue, publication, ct);
         return Ok(tierList);
     }
@@ -52,12 +52,13 @@ public class AnalyticsController(
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetPublishedPatches(
         [FromQuery] string? queue = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        [FromQuery] string? rankTier = null)
     {
         if (!AnalyticsQueueCatalog.IsSupported(queue))
             return BadRequest("Invalid queue. Expected solo, aram, arena, or flex.");
 
-        return Ok(await publicationService.GetPatchOptionsAsync(queue, ct));
+        return Ok(await publicationService.GetPatchOptionsAsync(queue, ct, rankTier));
     }
 
     [HttpGet("regions")]

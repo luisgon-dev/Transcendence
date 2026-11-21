@@ -3,7 +3,6 @@ import type { components } from "@transcendence/api-client";
 import { AnalyticsPatchFilter } from "@/components/AnalyticsPatchFilter";
 import { AnalyticsPatchNotice } from "@/components/AnalyticsPatchNotice";
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
-import { AnalyticsRegionFilter } from "@/components/AnalyticsRegionFilter";
 import { BackendErrorCard } from "@/components/BackendErrorCard";
 import { Toolbar } from "@/components/ui/Toolbar";
 import {
@@ -11,11 +10,10 @@ import {
   type ChampionGridEntry
 } from "@/components/ChampionsGridClient";
 import { fetchBackendJson } from "@/lib/backendCall";
-import { resolveAnalyticsRegion } from "@/lib/analyticsRegions";
 import { type AnalyticsSampleLike } from "@/lib/analyticsSample";
 import { getBackendBaseUrl, getErrorVerbosity } from "@/lib/env";
 import { fetchPublishedAnalyticsPatches } from "@/lib/lolAnalyticsPatches";
-import { latestPublishedPatchHref, normalizeAnalyticsPatch } from "@/lib/lolPatchFilters";
+import { normalizeAnalyticsPatch } from "@/lib/lolPatchFilters";
 import { DEFAULT_TIERLIST_RANK_TIER } from "@/lib/ranks";
 import { fetchChampionMap } from "@/lib/staticData";
 import {
@@ -28,18 +26,14 @@ type TierListResponse = components["schemas"]["TierListResponse"];
 export default async function ChampionsPage({
   searchParams
 }: {
-  searchParams?: Promise<{ region?: string; patch?: string }>;
+  searchParams?: Promise<{ patch?: string }>;
 }) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
-  const { activeRegion, options: regionOptions } = await resolveAnalyticsRegion(
-    resolvedSearchParams.region
-  );
   const verbosity = getErrorVerbosity();
   const tierListQuery = new URLSearchParams({
     rankTier: DEFAULT_TIERLIST_RANK_TIER
   });
   const selectedPatch = normalizeAnalyticsPatch(resolvedSearchParams.patch);
-  if (activeRegion !== "ALL") tierListQuery.set("region", activeRegion);
   if (selectedPatch) tierListQuery.set("patch", selectedPatch);
   const [{ version, champions }, tierListRes, patchOptions] = await Promise.all([
     fetchChampionMap(),
@@ -119,22 +113,19 @@ export default async function ChampionsPage({
             : "Builds, win rates, and matchups"}</span>
         }
         filters={
-          <div className="flex flex-wrap items-center gap-3">
-            <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} />
-            <AnalyticsPatchFilter patches={patchOptions} activePatch={selectedPatch} />
-          </div>
+          <AnalyticsPatchFilter patches={patchOptions} activePatch={selectedPatch} preserveSearchParams={false} />
         }
       />
       <AnalyticsPatchNotice
         selection={tierListRes.body?.patchSelection}
-        latestHref={selectedPatch ? latestPublishedPatchHref("/lol/champions", resolvedSearchParams) : undefined}
+        latestHref={selectedPatch ? "/lol/champions" : undefined}
       />
       {!tierListRes.body?.patchSelection || tierListRes.body.patchSelection.state === "Ready" ? (
         <AnalyticsSampleBanner
           sample={(tierListRes.body as { sample?: unknown } | null)?.sample as AnalyticsSampleLike}
         />
       ) : null}
-      <ChampionsGridClient champions={list} version={version} activeRegion={activeRegion} activePatch={selectedPatch} />
+      <ChampionsGridClient champions={list} version={version} activePatch={selectedPatch} />
     </div>
   );
 }

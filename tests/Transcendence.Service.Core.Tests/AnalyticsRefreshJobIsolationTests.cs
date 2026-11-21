@@ -4,10 +4,13 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Transcendence.Data;
+using Transcendence.Data.Models.LoL.Analytics;
 using Transcendence.Data.Models.LoL.Static;
+using Transcendence.Data.Models.Service;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Jobs;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
+using Transcendence.Service.Core.Services.Operations;
 using Transcendence.Service.Core.Tests.Support;
 
 namespace Transcendence.Service.Core.Tests;
@@ -27,7 +30,7 @@ public class AnalyticsRefreshJobIsolationTests
             harness.Refresher.Object,
             harness.Analytics.Object,
             NullLogger<RefreshPrecomputedAnalyticsJob>.Instance,
-            Options.Create(new WorkerJobScheduleOptions()));
+            Options.Create(new WorkerJobScheduleOptions()), Options.Create(new MatchArchiveOptions()));
 
         await job.ExecuteAsync(CancellationToken.None);
 
@@ -60,7 +63,8 @@ public class AnalyticsRefreshJobIsolationTests
             .ReturnsAsync(new PrecomputedAnalyticsRefreshResult(1, 2, 3, 4));
         var job = new RefreshPrecomputedAnalyticsJob(harness.Db, harness.Refresher.Object, harness.Analytics.Object,
             NullLogger<RefreshPrecomputedAnalyticsJob>.Instance,
-            Options.Create(new WorkerJobScheduleOptions { EnableRefreshPrecomputedAnalytics = enabled }));
+            Options.Create(new WorkerJobScheduleOptions { EnableRefreshPrecomputedAnalytics = enabled }),
+            Options.Create(new MatchArchiveOptions()));
 
         await job.ExecuteForPatchAsync(expectedPatch, CancellationToken.None);
 
@@ -70,6 +74,34 @@ public class AnalyticsRefreshJobIsolationTests
         harness.Analytics.Verify(x => x.InvalidateAnalyticsCacheForPatchAsync("16.14", It.IsAny<CancellationToken>()),
             Times.Exactly(refresh ? 1 : 0));
         harness.Analytics.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task TabularJobBackfillsOneEligibleHistoricalPatchPerRun()
+    {
+        await using var harness = await CreateHarnessAsync();
+        var today = DateTime.UtcNow;
+        foreach (var (patch, age) in new[] { ("16.10", 56), ("16.11", 42), ("16.12", 28), ("16.13", 14) })
+        {
+            harness.Db.Patches.Add(new Patch { Version = patch, ReleaseDate = today.AddDays(-age), IsActive = false });
+            harness.Db.ScopeMatchCountStats.Add(new ScopeMatchCountStat
+            {
+                Patch = patch, PlatformRegion = "ALL", RankScope = "ALL", TotalMatches = 100
+            });
+        }
+        harness.Db.MatchArchiveChunks.Add(new MatchArchiveChunk { Patch = "16.11", PrunedMatches = 1 });
+        await harness.Db.SaveChangesAsync();
+        harness.Refresher.Setup(refresher => refresher.RefreshTabularCoreAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PrecomputedAnalyticsRefreshResult(1, 2, 3, 4));
+        var job = new RefreshPrecomputedAnalyticsJob(harness.Db, harness.Refresher.Object, harness.Analytics.Object,
+            NullLogger<RefreshPrecomputedAnalyticsJob>.Instance,
+            Options.Create(new WorkerJobScheduleOptions()), Options.Create(new MatchArchiveOptions { KeepPatches = 4 }));
+
+        await job.ExecuteAsync(CancellationToken.None);
+
+        harness.Refresher.Verify(x => x.RefreshTabularCoreAsync("16.14", It.IsAny<CancellationToken>()), Times.Once);
+        harness.Refresher.Verify(x => x.RefreshTabularCoreAsync("16.12", It.IsAny<CancellationToken>()), Times.Once);
+        harness.Refresher.VerifyNoOtherCalls();
     }
 
     [Fact]

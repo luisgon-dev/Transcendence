@@ -195,6 +195,7 @@ without legacy accepted DTOs or cross-version fallbacks.
 - `GET /api/lol/analytics/status`
 - `GET /api/lol/analytics/dataset`
 - `GET /api/lol/analytics/patches`
+- `GET /api/lol/analytics/published-patches`
 - `GET /api/lol/analytics/champions/{championId}/winrates`
 - `GET /api/lol/analytics/champions/{championId}/profile`
 - `GET /api/lol/analytics/champions/{championId}/builds`
@@ -207,6 +208,8 @@ without legacy accepted DTOs or cross-version fallbacks.
 - `GET /api/lol/analytics/items/{itemId}`
 - `GET /api/lol/analytics/runes`
 - `GET /api/lol/analytics/runes/{runeId}`
+
+Rune descriptions in the library responses are plain text derived from the selected patch's rune metadata.
 
 The item detail's `purchases` (null for runes, and until Build Lab has counted the item on the
 patch) says when the item is completed: one stage per legendary slot (`stage` 1 = first completed
@@ -301,7 +304,7 @@ Champion-board region filtering uses the match's recorded platform region, so an
 
 - **Published champion analytics.** Tier lists and champion profiles default to the latest published patch for the selected queue. During rollover, an omitted `patch` can serve the previous published patch. The `patchSelection` object identifies the `activePatch`, `requestedPatch`, `effectivePatch`, and state.
 - An explicit `patch` stays pinned. An active patch awaiting its first rollup returns `200 OK` with `state: "Preparing"`, empty analytics, and no effective patch. An unknown or unpublished historical patch returns `state: "Unavailable"` and echoes the requested patch. A published patch with zero games for the selected filters stays `Ready`.
-- `GET /api/lol/analytics/published-patches?queue=solo` lists the active patch and up to eleven earlier published patches. Options include the patch, queue, release and detection timestamps, `isActive`, materialized `matchCount`, and `Ready` or `Preparing` state. With no active patch, up to twelve published patches are returned. The separate `/patches` endpoint still reports observed match counts.
+- `GET /api/lol/analytics/published-patches?queue=solo` lists the active patch and up to eleven earlier published patches. Options include the patch, queue, release and detection timestamps, `isActive`, materialized `matchCount`, and `Ready` or `Preparing` state. The optional `rankTier` selects the match-count scope. For `MASTER_PLUS`, the active option stays `Preparing` until the worker publishes its counts, and history includes patches that have published that scope. With no active patch, up to twelve published patches are returned. The separate `/patches` endpoint reports observed match counts.
 - Standalone legacy win-rate, build and matchup routes retain their active-patch defaults and compute behavior. Champion pages use the published profile instead.
 - Responses now include `sample` metadata for UI messaging:
   - `sampleStatus` (`sufficient`, `low_sample`, `no_data`)
@@ -312,7 +315,7 @@ Champion-board region filtering uses the match's recorded platform region, so an
   - `patchPhase` (`bootstrap`, `provisional`, `maturing`, `steady`)
   - `isProvisional`
 - `low_sample` and `no_data` are expected during early patch windows while ingestion ramps up.
-- Tier-list entries carry `movement` / `previousTier` for the persisted region=ALL default scopes (rank scope `all` or `EMERALD_PLUS`). Specific regions and exact ranks derive grades from the materialized counts and omit movement. A previous patch is required for movement.
+- Tier-list entries carry `movement` / `previousTier` for persisted global grades (`all`, `EMERALD_PLUS`, `MASTER_PLUS`). Specific regions and exact ranks derive grades from the materialized counts and omit movement. Movement compares adjacent patches with grades for the same scope.
 
 `queue` query semantics across tier list, patch options, champion profile, win rates, builds, and matchups:
 - `solo` (or omitted): Ranked Solo/Duo (`RANKED_SOLO_DUO`)
@@ -330,10 +333,11 @@ Tier methodology (`GET /api/lol/analytics/tierlist`):
 - `TierListResponse.confidence` reports whether the selected scope has a meaningful tier spread: `RESOLVED` (multiple tiers and at least one champion over the adaptive floor), `FLAT` (adequate samples but one tier), or `INSUFFICIENT` (no champion clears the floor / no data).
 - `TierListEntry` fields include `strengthScore` (signed delta vs role baseline), `contestedScore` (popularity/meta-presence index), `roleBaseline` (the role's baseline win rate), and `isLowSample`. `compositeScore` is retained as a back-compat alias of `strengthScore` and is slated for removal.
 
-`rankTier` query semantics across tier list, win rates, builds, and matchups:
+`rankTier` query semantics for tier lists, champion profiles, win rates, builds, matchups, and synergies:
 - `all` (or omitted): no rank filter
 - Exact tier token: `IRON|BRONZE|SILVER|GOLD|PLATINUM|EMERALD|DIAMOND|MASTER|GRANDMASTER|CHALLENGER`
 - Tier scope token: `EMERALD_PLUS` (alias `EMERALD+`) = `EMERALD` and above
+- `MASTER_PLUS` (alias `MASTER+`) includes `MASTER`, `GRANDMASTER`, and `CHALLENGER`. Tier list and champion profile publication uses this scope's readiness for default and explicit patches.
 
 `region` query semantics across tier list, win rates, builds, and matchups:
 - `ALL` (or omitted): global aggregate across enabled ingestion regions
@@ -615,7 +619,10 @@ pro-build analytics before approval.
 ### Build Lab
 
 `GET /api/lol/analytics/build-lab/{championId}` is the public decision-analytics surface (anonymous,
-`expensive-read` limiter). `role` is required. Optional context is `opponentChampionId`, `patch`, and
+`expensive-read` limiter). An explicit `role` selects that lane. When `role` is omitted, the server selects
+the champion's most-played lane in tracked Ranked Solo/Duo for the requested patch or recent patch pool.
+It uses region counts when available and global counts otherwise. `context.role` reports the resolved
+lane or `null` when no role counts are available. Optional context is `opponentChampionId`, `patch`, and
 `region` (`ALL`/`GLOBAL` or omitted means every region); `section=items|runes|spells|skills` picks the
 decision family and `mode=supported|impact|common` the ranking. Repeated `itemPath` values lock
 completed legendaries in order (max 5) and a single `runeSelections` value locks a keystone, so the

@@ -46,17 +46,17 @@ export function AnalyticsSampleBanner({
         ? {
             card: "border-warning/40 bg-warning/10",
             badge: "border-warning/40 bg-warning/20 text-fg",
-            kicker: "Light sample",
+            kicker: "Low sample",
             summary:
               shortfall > 0
                 ? `${shortfall} more recent games would make this read steadier.`
-                : "Useful direction, but the sample is still filling in."
+                : "Few games are available for these filters."
           }
         : {
             card: "border-danger/40 bg-danger/10",
             badge: "border-danger/40 bg-danger/20 text-fg",
-            kicker: "Early sample",
-            summary: "Treat this as early direction until more selected-patch games land."
+            kicker: "No games in this scope",
+            summary: "Select a different patch or adjust the filters."
           };
   const phaseLabel =
     normalized.patchPhase === "bootstrap"

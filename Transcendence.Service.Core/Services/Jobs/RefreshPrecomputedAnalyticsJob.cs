@@ -4,8 +4,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Transcendence.Data;
+using Transcendence.Service.Core.Services.Analytics;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
+using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
+using Transcendence.Service.Core.Services.Operations;
 
 namespace Transcendence.Service.Core.Services.Jobs;
 
@@ -22,7 +25,8 @@ public class RefreshPrecomputedAnalyticsJob(
     IPrecomputedAnalyticsRefresher refresher,
     IChampionAnalyticsService analyticsService,
     ILogger<RefreshPrecomputedAnalyticsJob> logger,
-    IOptions<WorkerJobScheduleOptions> scheduleOptions)
+    IOptions<WorkerJobScheduleOptions> scheduleOptions,
+    IOptions<MatchArchiveOptions> archiveOptions)
 {
     [Queue(HangfireQueues.AnalyticsBatch)]
     public Task ExecuteAsync(CancellationToken ct) => ExecuteCoreAsync(null, ct);
@@ -35,8 +39,6 @@ public class RefreshPrecomputedAnalyticsJob(
 
     private async Task ExecuteCoreAsync(string? expectedPatch, CancellationToken ct)
     {
-        var stopwatch = Stopwatch.StartNew();
-
         var patch = await db.Patches
             .AsNoTracking()
             .Where(p => p.IsActive)
@@ -55,6 +57,34 @@ public class RefreshPrecomputedAnalyticsJob(
             return;
         }
 
+        await RefreshPatchAsync(patch, ct);
+        if (expectedPatch == null)
+            await BackfillMasterPlusAsync(patch, ct);
+    }
+
+    private async Task BackfillMasterPlusAsync(string activePatch, CancellationToken ct)
+    {
+        var retained = await MatchRawRetentionPolicy.ProtectedPatchesAsync(db, archiveOptions.Value.KeepPatches, ct);
+        var globalCounts = db.ScopeMatchCountStats.AsNoTracking()
+            .Where(row => row.PlatformRegion == AnalyticsRegionCatalog.GlobalRegionCode);
+
+        // One retained historical patch per cadence, oldest first so movement has its comparison.
+        var patch = await db.Patches.AsNoTracking()
+            .Where(p => !p.IsActive && p.Version != activePatch && retained.Contains(p.Version)
+                && globalCounts.Any(row => row.Patch == p.Version && row.RankScope == RankTierCatalog.AllScope)
+                && !globalCounts.Any(row => row.Patch == p.Version && row.RankScope == RankTierCatalog.MasterPlusScope)
+                && !db.MatchArchiveChunks.Any(chunk => chunk.Patch == p.Version && chunk.PrunedMatches > 0))
+            .OrderBy(p => p.ReleaseDate).ThenBy(p => p.Version)
+            .Select(p => p.Version)
+            .FirstOrDefaultAsync(ct);
+
+        if (patch != null)
+            await RefreshPatchAsync(patch, ct);
+    }
+
+    private async Task RefreshPatchAsync(string patch, CancellationToken ct)
+    {
+        var stopwatch = Stopwatch.StartNew();
         PrecomputedAnalyticsRefreshResult result;
         try
         {

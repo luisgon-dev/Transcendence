@@ -13,10 +13,12 @@ import {
 export function AnalyticsPatchFilter({
   patches,
   activePatch,
+  preserveSearchParams = true,
   className
 }: {
   patches: readonly LolAnalyticsPatchOption[];
   activePatch?: string | null;
+  preserveSearchParams?: boolean;
   className?: string;
 }) {
   const router = useRouter();
@@ -29,7 +31,7 @@ export function AnalyticsPatchFilter({
 
   function handleChange(event: React.ChangeEvent<HTMLSelectElement>) {
     const patch = event.target.value;
-    const nextParams = new URLSearchParams(searchParams.toString());
+    const nextParams = new URLSearchParams(preserveSearchParams ? searchParams.toString() : undefined);
     if (patch) {
       nextParams.set("patch", patch);
     } else {

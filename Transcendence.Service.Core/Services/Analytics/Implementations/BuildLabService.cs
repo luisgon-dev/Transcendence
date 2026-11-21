@@ -5,6 +5,7 @@ using Transcendence.Data;
 using Transcendence.Data.Models.LoL.Analytics;
 using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
+using Transcendence.Service.Core.Services.RiotApi;
 
 namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 
@@ -77,11 +78,54 @@ public sealed class BuildLabService(
         if (!options.Value.Enabled)
             return Empty(normalized, EmptyCoverage, DisabledReason);
         var coverage = await CoverageAsync(normalized.Patch, ct);
+        if (normalized.Role == null)
+        {
+            var role = await MostPlayedRoleAsync(normalized, coverage.IncludedPatches, ct);
+            if (role == null)
+                return Empty(normalized, coverage, "Choose a role to explore this champion's builds.");
+
+            normalized = normalized with { Role = role };
+        }
         var response = await GetAsync(normalized, coverage, ct);
         return response.Available
             ? response with { Summary = await SummaryAsync(normalized, coverage, ct) }
             : response;
     }
+
+    private async Task<string?> MostPlayedRoleAsync(
+        BuildLabQuery query, IReadOnlyList<string> includedPatches, CancellationToken ct)
+    {
+        var patches = query.Patch == null ? includedPatches.ToArray() : [query.Patch];
+        if (patches.Length == 0)
+            patches = await RecentPatches().ToArrayAsync(ct);
+
+        var region = AnalyticsRegionCatalog.NormalizeToFilter(query.Region);
+        var roles = await context.ChampionRoleTierStats.AsNoTracking()
+            .Where(row => row.ChampionId == query.ChampionId &&
+                          row.QueueFamily == QueueCatalog.QueueFamilyRankedSoloDuo && patches.Contains(row.Patch))
+            .GroupBy(row => row.Role)
+            .Select(group => new
+            {
+                Role = group.Key,
+                Games = group.Sum(row => (long)row.Games),
+                RegionalGames = group.Sum(row => row.PlatformRegion == region ? (long)row.Games : 0L)
+            })
+            .ToListAsync(ct);
+
+        var scoped = region != null && roles.Any(role => Roles.Contains(role.Role) && role.RegionalGames > 0);
+        return roles.Where(role => Roles.Contains(role.Role) && role.Games > 0)
+            .OrderByDescending(role => scoped ? role.RegionalGames : role.Games)
+            .ThenBy(role => role.Role, StringComparer.Ordinal)
+            .Select(role => role.Role)
+            .FirstOrDefault();
+    }
+
+    private IQueryable<string> RecentPatches() => context.Patches.AsNoTracking()
+        .OrderByDescending(patch => patch.IsActive)
+        .ThenByDescending(patch => patch.ReleaseDate)
+        .ThenByDescending(patch => patch.Version)
+        .Select(patch => patch.Version)
+        .Take(PatchRecencyWeights.Length);
 
     public async Task<ChampionRecommendationSummary> GetChampionRecommendationAsync(
         int championId,
@@ -402,12 +446,7 @@ public sealed class BuildLabService(
             $"analytics:build-lab:v2:coverage:{requestedPatch ?? "recent"}",
             async cancel =>
             {
-                var recent = await context.Patches.AsNoTracking()
-                    .OrderByDescending(patch => patch.IsActive)
-                    .ThenByDescending(patch => patch.ReleaseDate)
-                    .Select(patch => patch.Version)
-                    .Take(PatchRecencyWeights.Length)
-                    .ToListAsync(cancel);
+                var recent = await RecentPatches().ToListAsync(cancel);
                 // A few rows per retained patch, kept by the refresher; see BuildLabCoverage.
                 var coverage = await context.BuildLabCoverage.AsNoTracking().ToListAsync(cancel);
                 var counted = coverage
@@ -463,8 +502,8 @@ public sealed class BuildLabService(
     {
         if (query.ChampionId <= 0)
             throw new ArgumentException("Champion id must be positive.", nameof(query));
-        var role = query.Role.Trim().ToUpperInvariant();
-        if (!Roles.Contains(role))
+        var role = query.Role?.Trim().ToUpperInvariant();
+        if (role != null && !Roles.Contains(role))
             throw new ArgumentException("Role must be TOP, JUNGLE, MIDDLE, BOTTOM, or UTILITY.", nameof(query));
         var section = query.Section.Trim().ToUpperInvariant();
         if (!Sections.Contains(section))

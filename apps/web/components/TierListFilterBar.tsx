@@ -66,10 +66,7 @@ export function TierListFilterBar({
     }
   }
 
-  const roleExtraParams: Record<string, string> = { ...sharedExtraParams };
-  if (activeRank && activeRank.toLowerCase() !== "all") {
-    roleExtraParams.rankTier = activeRank;
-  }
+  const roleExtraParams = { ...sharedExtraParams, rankTier: activeRank };
 
   const rankExtraParams: Record<string, string> = { ...sharedExtraParams };
   if (activeRole && activeRole.toUpperCase() !== "ALL") {

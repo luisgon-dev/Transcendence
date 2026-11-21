@@ -16,6 +16,12 @@ const championId = 51;
 let published = false;
 let buildsReady = false;
 const profileRequests = [];
+const buildLabRequests = [];
+const runeDescription = "Takedowns restore 5% of your missing health and grant an additional 20 gold.";
+const buildLabCoverage = {
+  includedPatches: [earlier], patchWeights: [1], countedMatches: 2400,
+  lastCountedAtUtc: now, includedRegions: ["NA1"], rankScope: "ALL_TRACKED"
+};
 
 function selection(requestedPatch) {
   const preparing = requestedPatch === active && !published;
@@ -41,7 +47,7 @@ function fixture(url) {
   const requested = url.searchParams.get("patch");
   const patchSelection = selection(requested);
   const patch = patchSelection.effectivePatch ?? requested;
-  const rankTier = url.searchParams.get("rankTier") ?? "EMERALD_PLUS";
+  const rankTier = url.searchParams.get("rankTier") ?? "all";
   const region = url.searchParams.get("region") ?? "ALL";
   const data = patchSelection.state === "Ready";
 
@@ -63,8 +69,9 @@ function fixture(url) {
   }
   if (url.pathname === "/api/lol/analytics/champions/51/profile") {
     profileRequests.push(new URLSearchParams(url.search));
+    const selectedRole = url.searchParams.get("role") ?? role;
     return {
-      championId, effectiveRole: role, queueFamily, patchSelection,
+      championId, effectiveRole: selectedRole, queueFamily, patchSelection,
       winRates: {
         championId, patch, queueFamily,
         byRoleTier: data ? [{ ...grade(patch), rankTier: "EMERALD", patch }] : []
@@ -72,8 +79,28 @@ function fixture(url) {
       grade: data ? { ...grade(patch), rankScope: rankTier } : null,
       buildsState: patch === active && !buildsReady ? "Preparing" : "Ready",
       matchupsState: "Ready",
+      recommendation: buildsReady ? { available: true, coverage: buildLabCoverage } : null,
       builds: { championId, role, rankTier, region, patch, queueFamily, builds: [], globalCoreItems: [] },
       matchups: { championId, role, rankTier, region, patch, queueFamily, counters: [], favorableMatchups: [], allMatchups: [] }
+    };
+  }
+  if (url.pathname === "/api/lol/analytics/build-lab/51") {
+    buildLabRequests.push(new URLSearchParams(url.search));
+    return {
+      available: false,
+      context: {
+        championId, role: url.searchParams.get("role") ?? role,
+        requestedPatch: requested, requestedRegion: region,
+        section: url.searchParams.get("section"), mode: url.searchParams.get("mode")
+      },
+      coverage: buildLabCoverage, selectedPath: [], stages: [], unavailableReason: "Few games in this fixture."
+    };
+  }
+  if (url.pathname === "/api/lol/analytics/runes/8005") {
+    return {
+      resourceType: "rune", patch: earlier, region, totalParticipantGames: 1000,
+      resource: { resourceId: 8005, name: "Press the Attack", description: runeDescription, games: 400, wins: 200, winRate: 0.5, pickRate: 0.4, topChampions: [] },
+      championStats: []
     };
   }
 }
@@ -102,6 +129,8 @@ const next = spawn(process.execPath, [require.resolve("next/dist/bin/next"), "st
     TRN_PUBLIC_ORIGIN: origin,
     TRN_BACKEND_API_KEY: "rollover-test-fixture",
     TRN_TRUSTED_PROXY_HEADERS: "true",
+    TRN_FEATURE_BUILD_LAB: "true",
+    TRN_FEATURE_CHAMPION_RECOMMENDATIONS: "true",
     NEXT_TELEMETRY_DISABLED: "1"
   },
   windowsHide: true,
@@ -129,6 +158,8 @@ try {
   await page.goto(`${origin}/lol/champions`);
   await expect(oldBanner).toBeVisible();
   await expect(page.getByRole("link", { name: /Caitlyn/ })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: /region/i })).toHaveCount(0);
+  await expect(page.getByRole("navigation").getByRole("link", { name: "Live Game", exact: true })).toHaveCount(0);
   await page.goto(origin);
   await expect(oldBanner).toBeVisible();
   await page.getByRole("region", { name: "Strongest by lane" }).getByRole("link", { name: /Caitlyn/ }).click();
@@ -159,7 +190,54 @@ try {
   await page.getByRole("navigation").getByRole("link", { name: "Tier List", exact: true }).first().click();
   await expect(page.locator("table").getByText("63.40%", { exact: true })).toBeVisible();
   await expect(page.getByText("This page is taking too long to load.", { exact: true })).toHaveCount(0);
-  console.log("Verified last published homepage navigation, exact-patch preparing state, and subsequent publication in one browser tab.");
+
+  const rank = page.getByRole("combobox", { name: "Rank", exact: true });
+  await rank.click();
+  await page.getByRole("option", { name: "Master+", exact: true }).click();
+  await expect(page).toHaveURL(/rankTier=MASTER_PLUS/);
+  await page.getByRole("link", { name: "Bottom", exact: true }).click();
+  await expect(page).toHaveURL(/role=BOTTOM&rankTier=MASTER_PLUS/);
+  await page.goBack();
+  await expect(rank).toHaveText("Master+");
+  await rank.click();
+  await page.getByRole("option", { name: "All Ranks", exact: true }).click();
+  await expect(page).toHaveURL(/rankTier=all/);
+  const allRankChampion = page.locator('table a[href^="/lol/champions/51?"]').first();
+  await expect(allRankChampion).toHaveAttribute("href", /rankTier=all/);
+  await allRankChampion.click();
+  await expect(page).toHaveURL(/\/lol\/champions\/51\?[^#]*rankTier=all/);
+
+  await page.goto(`${origin}/lol/champions/51?role=UTILITY&region=NA1&patch=${active}`);
+  await rank.click();
+  await page.getByRole("option", { name: "Master+", exact: true }).click();
+  await expect(page).toHaveURL(/rankTier=MASTER_PLUS/);
+  await expect.poll(() => profileRequests.some(params => params.get("rankTier") === "MASTER_PLUS" &&
+    params.get("role") === "UTILITY" && params.get("patch") === active && params.get("region") === "NA1")).toBe(true);
+  const expectedBuildLab = `/lol/builds/51?role=UTILITY&patch=${active}&region=NA1`;
+  await expect(page.getByRole("link", { name: "Explore in Build Lab" })).toHaveAttribute("href", expectedBuildLab);
+  await page.getByRole("link", { name: "Compare alternatives in Build Lab" }).click();
+  await expect(page.getByRole("combobox", { name: "Role", exact: true })).toHaveText("Support");
+  await page.goBack();
+  await page.getByRole("link", { name: "Explore in Build Lab" }).click();
+  await expect(page.getByRole("combobox", { name: "Role", exact: true })).toHaveText("Support");
+  assert(buildLabRequests.some(params => params.get("role") === "UTILITY" && params.get("patch") === active && params.get("region") === "NA1"));
+  await page.goto(`${origin}/lol/builds/51`);
+  const buildRole = page.getByRole("combobox", { name: "Role", exact: true });
+  await expect(buildRole).toHaveText("Bottom");
+  await buildRole.click();
+  await page.getByRole("option", { name: "Jungle", exact: true }).click();
+  await expect(page).toHaveURL(/role=JUNGLE/);
+  await expect(buildRole).toHaveText("Jungle");
+
+  const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await mobile.goto(`${origin}/lol/champions`);
+  await expect(mobile.getByRole("navigation").getByRole("link", { name: /^Live(?: Game)?$/ })).toHaveCount(0);
+  await mobile.getByLabel("Patch", { exact: true }).selectOption(earlier);
+  await expect(mobile.getByRole("link", { name: /Caitlyn/ })).toHaveAttribute("href", `/lol/champions/51?patch=${earlier}`);
+  await mobile.goto(`${origin}/lol/runes/8005`);
+  await expect(mobile.getByText(runeDescription, { exact: true })).toBeVisible();
+
+  console.log("Verified published patch rollover, rank and role navigation, global champion browsing, and rune copy.");
 } catch (error) {
   console.error(logs);
   throw error;

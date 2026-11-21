@@ -12,6 +12,8 @@ describe("normalizeRankTierParam", () => {
   it("normalizes supported values", () => {
     expect(normalizeRankTierParam("emerald_plus")).toBe("EMERALD_PLUS");
     expect(normalizeRankTierParam("Emerald+")).toBe("EMERALD_PLUS");
+    expect(normalizeRankTierParam("Master+")).toBe("MASTER_PLUS");
+    expect(normalizeRankTierParam("Master")).toBe("MASTER");
     expect(normalizeRankTierParam("diamond")).toBe("DIAMOND");
   });
 
@@ -43,6 +45,7 @@ describe("resolveDefaultedRankTier", () => {
 describe("rankTierDisplayLabel", () => {
   it("maps display labels", () => {
     expect(rankTierDisplayLabel("EMERALD_PLUS")).toBe("Emerald+");
+    expect(rankTierDisplayLabel("MASTER_PLUS")).toBe("Master+");
     expect(rankTierDisplayLabel("GRANDMASTER")).toBe("Grandmaster");
     expect(rankTierDisplayLabel("all")).toBe("All Ranks");
   });
@@ -55,6 +58,7 @@ describe("rankEmblemUrl", () => {
 
   it("returns null for non-ranked scope tokens", () => {
     expect(rankEmblemUrl("EMERALD_PLUS")).toBeNull();
+    expect(rankEmblemUrl("MASTER_PLUS")).toBeNull();
     expect(rankEmblemUrl("UNRANKED")).toBeNull();
   });
 });

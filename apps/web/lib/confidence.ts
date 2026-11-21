@@ -69,10 +69,10 @@ export function adjustedWinRatePercent(input: {
 /** Map a confidence level onto the AnalyticsSampleBanner sample vocabulary. */
 export function confidenceSampleLabel(
   level: ConfidenceLevel
-): "Stable" | "Light" | "Early" {
-  if (level === "high") return "Stable";
-  if (level === "moderate") return "Light";
-  return "Early";
+): "Stable sample" | "Light sample" | "Low sample" {
+  if (level === "high") return "Stable sample";
+  if (level === "moderate") return "Light sample";
+  return "Low sample";
 }
 
 /**

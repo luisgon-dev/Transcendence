@@ -11,15 +11,12 @@ export function RoleFilterTabs({
   activeRole,
   baseHref,
   extraParams,
-  keepRankAll = false,
   className
 }: {
   roles: readonly string[];
   activeRole: string;
   baseHref: string;
   extraParams?: Record<string, string>;
-  /** Preserve an explicit `rankTier=all` instead of stripping it (Emerald+-default pages). */
-  keepRankAll?: boolean;
   className?: string;
 }) {
   function buildHref(role: string) {
@@ -27,7 +24,7 @@ export function RoleFilterTabs({
     if (role !== "ALL") params.set("role", role);
     if (extraParams) {
       for (const [k, v] of Object.entries(extraParams)) {
-        if (v && (v.toLowerCase() !== "all" || (keepRankAll && k === "rankTier"))) params.set(k, v);
+        if (v) params.set(k, v);
       }
     }
     const qs = params.toString();

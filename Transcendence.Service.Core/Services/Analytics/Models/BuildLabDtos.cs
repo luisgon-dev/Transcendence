@@ -15,7 +15,7 @@ public record BuildLabCoverageDto(
 
 public record BuildLabContextDto(
     int ChampionId,
-    string Role,
+    string? Role,
     int? OpponentChampionId,
     string? RequestedPatch,
     string RequestedRegion,
@@ -83,7 +83,7 @@ public record ChampionRecommendationSummary(
 
 public record BuildLabQuery(
     int ChampionId,
-    string Role,
+    string? Role,
     int? OpponentChampionId,
     string? Patch,
     string? Region,

@@ -200,12 +200,11 @@ public sealed class ChampionSynergyService(
         var platform = AnalyticsRegionCatalog.NormalizeToFilter(region);
         if (platform != null)
             query = query.Where(fact => fact.PlatformRegion == platform);
-        if (rankScope.HasFilter)
+        var tiers = rankScope.Tiers;
+        if (tiers != null)
         {
             var ranks = context.Ranks.AsNoTracking().InAnalyticsRankQueue(queueFamily);
-            query = rankScope.IsEmeraldPlus
-                ? query.Where(fact => ranks.Any(rank => rank.SummonerId == fact.SummonerId && RankTierCatalog.EmeraldPlusTiers.Contains(rank.Tier)))
-                : query.Where(fact => ranks.Any(rank => rank.SummonerId == fact.SummonerId && rank.Tier == rankScope.ExactTier));
+            query = query.Where(fact => ranks.Any(rank => rank.SummonerId == fact.SummonerId && tiers.Contains(rank.Tier)));
         }
         var baseline = await query.Where(fact => fact.PartnerParticipantId == 0).GroupBy(_ => 1)
             .Select(group => new BaselineRow { Games = group.Count(), Wins = group.Count(fact => fact.Win) })

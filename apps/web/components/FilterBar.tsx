@@ -30,7 +30,6 @@ export function FilterBar({
   activeQueue = "solo",
   showRoles = true,
   extraParams,
-  explicitAllRank = false,
   baseHref,
   className
 }: {
@@ -45,8 +44,6 @@ export function FilterBar({
   activeQueue?: AnalyticsQueue;
   showRoles?: boolean;
   extraParams?: Record<string, string | null | undefined>;
-  /** Keep "All Ranks" selectable on pages whose absent-param default is Emerald+. */
-  explicitAllRank?: boolean;
   baseHref: string;
   className?: string;
 }) {
@@ -60,10 +57,7 @@ export function FilterBar({
     }
   }
 
-  const roleExtraParams: Record<string, string> = { ...sharedExtraParams };
-  if (activeRank && (activeRank.toLowerCase() !== "all" || explicitAllRank)) {
-    roleExtraParams.rankTier = activeRank;
-  }
+  const roleExtraParams = { ...sharedExtraParams, rankTier: activeRank };
 
   const rankExtraParams: Record<string, string> = { ...sharedExtraParams };
   if (activeRole && activeRole.toUpperCase() !== "ALL") {
@@ -91,7 +85,6 @@ export function FilterBar({
           activeRole={activeRole}
           baseHref={baseHref}
           extraParams={roleExtraParams}
-          keepRankAll={explicitAllRank}
         />
       ) : null}
       <RankFilterDropdown
@@ -99,7 +92,6 @@ export function FilterBar({
         activeRank={activeRank}
         baseHref={baseHref}
         extraParams={rankExtraParams}
-        emitAllRank={explicitAllRank}
       />
       {regionOptions && activeRegion ? (
         <AnalyticsRegionFilter options={regionOptions} activeRegion={activeRegion} variant="select" />

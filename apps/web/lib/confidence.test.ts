@@ -103,9 +103,9 @@ describe("adjustedWinRatePercent", () => {
 
 describe("confidenceSampleLabel", () => {
   it("maps levels onto the analytics sample vocabulary", () => {
-    expect(confidenceSampleLabel("high")).toBe("Stable");
-    expect(confidenceSampleLabel("moderate")).toBe("Light");
-    expect(confidenceSampleLabel("low")).toBe("Early");
+    expect(confidenceSampleLabel("high")).toBe("Stable sample");
+    expect(confidenceSampleLabel("moderate")).toBe("Light sample");
+    expect(confidenceSampleLabel("low")).toBe("Low sample");
   });
 });
 

@@ -13,27 +13,15 @@ namespace Transcendence.Service.Core.Services.Analytics.Implementations;
 /// </summary>
 internal static class AnalyticsScopeMath
 {
-    internal readonly record struct RankTierScope(
-        string CacheToken,
-        string? ExactTier,
-        bool IsEmeraldPlus)
+    internal readonly record struct RankTierScope(string Token, IReadOnlyList<string>? Tiers)
     {
-        public bool HasFilter => IsEmeraldPlus || !string.IsNullOrWhiteSpace(ExactTier);
+        public string CacheToken => Token == RankTierCatalog.AllScope ? "all" : Token;
     }
 
     internal static RankTierScope ParseRankTierScope(string? rankTier)
     {
-        if (string.IsNullOrWhiteSpace(rankTier))
-            return new RankTierScope("all", null, false);
-
-        var normalized = rankTier.Trim().ToUpperInvariant().Replace("+", "_PLUS");
-        if (normalized == "ALL")
-            return new RankTierScope("all", null, false);
-
-        if (normalized == "EMERALD_PLUS")
-            return new RankTierScope("EMERALD_PLUS", null, true);
-
-        return new RankTierScope(normalized, normalized, false);
+        var token = RankTierCatalog.NormalizeScopeToken(rankTier);
+        return new RankTierScope(token, RankTierCatalog.ResolveScopeTiers(token));
     }
 
     internal static IQueryable<Data.Models.LoL.Match.MatchParticipant> ApplyRankTierScopeToParticipants(
@@ -42,21 +30,15 @@ internal static class AnalyticsScopeMath
         IQueryable<Data.Models.LoL.Account.Rank> ranks,
         string queueFamily = QueueCatalog.QueueFamilyRankedSoloDuo)
     {
-        if (!scope.HasFilter)
+        var tiers = scope.Tiers;
+        if (tiers == null)
             return query;
 
         ranks = ranks.InAnalyticsRankQueue(queueFamily);
 
-        if (scope.IsEmeraldPlus)
-        {
-            return query.Where(mp => ranks.Any(r =>
-                r.SummonerId == mp.SummonerId &&
-                RankTierCatalog.EmeraldPlusTiers.Contains(r.Tier)));
-        }
-
         return query.Where(mp => ranks.Any(r =>
             r.SummonerId == mp.SummonerId &&
-            r.Tier == scope.ExactTier));
+            tiers.Contains(r.Tier)));
     }
 
     internal static HashSet<string> ResolvePlatformsForRegion(string region)
@@ -98,8 +80,5 @@ internal static class AnalyticsScopeMath
     }
 
     /// <summary>The rank-scope token for the ban tables, derived from the parsed scope (see ParseRankTierScope).</summary>
-    internal static string ScopeTokenOf(RankTierScope scope) =>
-        scope.IsEmeraldPlus
-            ? RankTierCatalog.EmeraldPlusScope
-            : string.IsNullOrWhiteSpace(scope.ExactTier) ? RankTierCatalog.AllScope : scope.ExactTier!;
+    internal static string ScopeTokenOf(RankTierScope scope) => scope.Token;
 }

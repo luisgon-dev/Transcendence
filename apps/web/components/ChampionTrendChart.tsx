@@ -1,5 +1,6 @@
 import { Card } from "@/components/ui/Card";
 import { formatPercent } from "@/lib/format";
+import { rankTierDisplayLabel } from "@/lib/ranks";
 
 export type ChampionTrendPoint = {
   patch: string;
@@ -62,7 +63,7 @@ export function ChampionTrendChart({
           <p className="type-kicker text-muted">Patch history</p>
           <h2 className="mt-1 type-section">Win-rate trend</h2>
           <p className="mt-1 text-xs text-muted">
-            Global {trend?.rankScope === "EMERALD_PLUS" ? "Emerald+" : "all-rank"} aggregate · {points.length} patches
+            Global · {rankTierDisplayLabel(trend?.rankScope)} · {points.length} patches
           </p>
         </div>
         <div className="text-right">

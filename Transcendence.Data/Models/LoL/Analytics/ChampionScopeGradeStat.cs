@@ -7,8 +7,8 @@ namespace Transcendence.Data.Models.LoL.Analytics;
 /// this is a fully-scored row: empirical-Bayes win-rate delta vs the role baseline, the absolute-cutoff tier,
 /// the separate popularity/"contested" axis, and patch-over-patch movement.
 /// <para>
-/// Persisted only for <c>PlatformRegion = "ALL"</c> and <c>RankScope ∈ {"ALL", "EMERALD_PLUS"}</c> — the
-/// scopes every web surface defaults to. Specific-region or exact-tier requests recompute on read via the
+/// Persisted for <c>PlatformRegion = "ALL"</c> and rank scopes <c>ALL</c>, <c>EMERALD_PLUS</c>, and
+/// <c>MASTER_PLUS</c>. Specific-region or exact-tier requests recompute on read via the
 /// same scorer (no movement). One row per role plus a synthetic <c>Role = "ALL"</c> overview row that carries
 /// the champion's primary (most-played) role grade (the graded role is in <see cref="PrimaryRole"/>).
 /// </para>
@@ -30,7 +30,7 @@ public class ChampionScopeGradeStat
     /// <summary>Persisted region scope — currently always the synthetic global <c>"ALL"</c>.</summary>
     public string PlatformRegion { get; set; } = "";
 
-    /// <summary>Rank-scope token: <c>"ALL"</c> or <c>"EMERALD_PLUS"</c>.</summary>
+    /// <summary>Rank-scope token: <c>ALL</c>, <c>EMERALD_PLUS</c>, or <c>MASTER_PLUS</c>.</summary>
     public string RankScope { get; set; } = "";
 
     /// <summary>Role partition: TOP/JUNGLE/MIDDLE/BOTTOM/UTILITY, or <c>"ALL"</c> for the overview row.</summary>

@@ -257,9 +257,10 @@ activity can make low-priority backups take longer.
 
 Each backup validates data-file checksums with `pg_verifybackup`, validates the included WAL with
 `pg_waldump`, uploads encrypted artifacts, checks restic, and reads back the manifest. Only then is
-the snapshot tagged verified and eligible as the next incremental's parent. Retention keeps two
+the snapshot tagged verified and eligible as the next incremental's parent. Retention planning preserves two
 complete full-plus-incremental chains, including every dependency; unknown/missing/cyclic metadata
-fails closed. Legacy logical snapshots and separate match archives are excluded from this policy.
+fails closed. No snapshots are deleted by this job. Legacy logical snapshots and separate match
+archives are excluded from this policy.
 
 Install native units from the verified release bundle after a successful release:
 
@@ -424,3 +425,49 @@ switches the user's existing proxy or backup destination.
 The [production host configuration](PRODUCTION-HOST.md) records the adopted LXC
 addresses, dedicated Unraid repository, recovery password location and isolated
 restore workspace. Verify live state before reusing that dated host inventory.
+
+
+### Native PostgreSQL recovery image and retention
+
+Native backups require Docker's containerd image store and platform-aware
+inspection (Engine API 1.49+). The running server's OCI index and its linux/amd64
+child must resolve locally from the Docker Official PostgreSQL repository. Image
+metadata records both; the known historical index maps to its independently
+verified amd64 child for pre-existing snapshots. An unknown historical index
+without recorded child information must be verified and mapped before restore.
+
+Before any restore drill, pre-stage the snapshot's exact OCI index into the
+**restore daemon** (not merely the production daemon), with its complete
+linux/amd64 content. The isolated daemon runs without network egress, so use a
+portable image archive created and verified while the official image is available.
+Verify the selected child's descriptor and the original OCI index digest after
+an offline load into a disposable matching daemon. Retain the image archive and
+its checksum separately from the database and retain it as long as any snapshot
+depends on it. A registered official RepoDigest is required for backup creation;
+restore can instead use a locally imported content address only if the original
+index and exact recorded child still match. Restore never pulls or runs a tag.
+
+After verifying the immutable reference, give that exact index a local retention
+tag (for example, `transcendence-recovery/postgres:sha256-<full index hash>`)
+in each daemon. Default dangling-only image pruning keeps tagged images. Do not
+include retention tags in broad `docker image prune --all` or system cleanups;
+the local tag is protection and archive transport only, never a restore identity.
+
+For a cold restore daemon adoption, preflight free space and stage the verified
+archive before changing the isolated daemon configuration. The new isolated
+store is `/var/lib/transcendence-backup/docker-oci`; the legacy store
+`/var/lib/transcendence-backup/docker` is left intact, not emptied or migrated.
+Use only the isolated daemon socket, load the verified archive, verify both
+descriptors, and rehearse a restore before adopting the new config. Do not change
+the production daemon's backend or restart PostgreSQL. If adoption fails, stop
+only the isolated daemon and restore its previous config/workspace drop-in; keep
+both stores and the archive for investigation.
+
+Routine backups report retention candidates and do not run forget or prune.
+Validate the current verified dependency graph and obtain approval for a separate
+retention operation. Monitor backup repository free space while expiration is manual.
+
+Changing the Compose image reference does not affect a running service until
+Compose is applied to PostgreSQL. Adopt that pin in a planned deployment; do not
+recreate PostgreSQL solely to restore backup tooling. A future digest change
+requires an explicitly planned full baseline, not a silent incremental reset.

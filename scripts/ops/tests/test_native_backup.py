@@ -1,5 +1,6 @@
 import importlib.util
 import io
+import json
 import os
 from pathlib import Path
 import tarfile
@@ -17,6 +18,82 @@ def entry(number, parent=None, time=None):
         native.TAG, 'trn-verified', 'trn-system:fixture',
         'trn-kind:' + ('full' if parent is None else 'incremental'),
         'trn-parent:' + (f'{parent:064x}' if parent is not None else 'none')])
+
+
+class NativeImageTests(unittest.TestCase):
+    index = native.CURRENT_INDEX
+    child = native.LEGACY_CHILDREN[index, native.PLATFORM]
+
+    def fixture(self):
+        info = dict(image="postgres@" + self.index, platform=native.PLATFORM)
+        official = native.OFFICIAL + "@" + self.index
+        root = dict(Descriptor=dict(digest=self.index, mediaType=native.OCI_INDEX),
+                    RepoDigests=["my.registry/postgres@" + self.index, info["image"]])
+        child = dict(Descriptor=dict(digest=self.child, mediaType=native.OCI_MANIFEST, annotations={
+            "org.opencontainers.image.url": "https://hub.docker.com/_/postgres",
+            "org.opencontainers.image.source": "https://github.com/docker-library/postgres.git#rev:path",
+        }), Os="linux", Architecture="amd64")
+        return info, official, root, child
+
+    def test_exact_cached_index_and_platform_are_used_not_first_repo_digest(self):
+        info, official, root, child = self.fixture()
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = native.NativeBackups(Mock(), tmp)
+            with patch.object(engine, "call", side_effect=[json.dumps(root), json.dumps(child)]) as call:
+                self.assertEqual(engine.cached_image(info), official)
+                self.assertEqual(call.call_args_list[0].args[0][:4], ["docker", "image", "inspect", official])
+                self.assertEqual(call.call_args_list[1].args[0][:6],
+                                 ["docker", "image", "inspect", "--platform", native.PLATFORM, official])
+            with patch.object(native.os, "getuid", create=True, return_value=0), \
+                 patch.object(native.os, "getgid", create=True, return_value=0):
+                self.assertIn("--pull=never", engine.tool(official, tmp, ["pg_verifybackup"]))
+
+    def test_offline_archive_uses_content_address_never_a_tag(self):
+        info, _, root, child = self.fixture()
+        root.update(Id=self.index, RepoDigests=[])
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = native.NativeBackups(Mock(), tmp)
+            with patch.object(engine, "call", side_effect=[
+                RuntimeError("official reference not retained by archive"), json.dumps(root), json.dumps(child)
+            ]) as call:
+                self.assertEqual(engine.cached_image(info, recovery=True), self.index)
+                self.assertEqual(call.call_args_list[1].args[0][3], self.index)
+                self.assertEqual(call.call_args_list[2].args[0][5], self.index)
+            root["Id"] = self.child
+            with patch.object(engine, "call", side_effect=[
+                RuntimeError("official reference unavailable"), json.dumps(root)
+            ]), self.assertRaisesRegex(ValueError, "official OCI index"):
+                engine.cached_image(info, recovery=True)
+
+    def test_rejects_untrusted_references_and_unknown_legacy_indexes_without_docker(self):
+        info, _, _, _ = self.fixture()
+        for invalid in (dict(info, image="postgres:18.7-alpine"),
+                        dict(info, image="mirror.example/postgres@" + self.index),
+                        dict(info, image="postgres@sha256:" + "1" * 64),
+                        dict(info, image_manifest="sha256:" + "1" * 64),
+                        dict(info, platform="linux/arm64")):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                native.image_identity(invalid)
+
+    def test_rejects_wrong_repository_index_and_child(self):
+        for fault in ("repository", "index", "child", "architecture", "annotation", "unavailable"):
+            info, _, root, child = self.fixture()
+            if fault == "repository":
+                root["RepoDigests"].pop()
+            if fault == "index":
+                root["Descriptor"]["digest"] = self.child
+            if fault == "child":
+                child["Descriptor"]["digest"] = self.index
+            if fault == "architecture":
+                child["Architecture"] = "arm64"
+            if fault == "annotation":
+                child["Descriptor"]["annotations"].clear()
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as tmp:
+                engine = native.NativeBackups(Mock(), tmp)
+                with patch.object(engine, "call", side_effect=[
+                    json.dumps(root), RuntimeError("missing platform") if fault == "unavailable" else json.dumps(child)
+                ]), self.assertRaises((ValueError, RuntimeError)):
+                    engine.cached_image(info)
 
 
 class NativeRetentionTests(unittest.TestCase):
@@ -106,7 +183,6 @@ class NativeBackupGuardTests(unittest.TestCase):
 
     def test_pending_snapshots_are_never_incremental_parents(self):
         api = Mock()
-        import json
         verified = entry(1)
         pending = entry(2, 1)
         pending['tags'].remove('trn-verified')

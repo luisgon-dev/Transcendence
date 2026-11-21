@@ -1,5 +1,5 @@
 {
-  "data-root": "/var/lib/transcendence-backup/docker",
+  "data-root": "/var/lib/transcendence-backup/docker-oci",
   "exec-root": "/run/transcendence-restore-docker",
   "pidfile": "/run/transcendence-restore-docker.pid",
   "hosts": [
@@ -12,9 +12,8 @@
   "ip-forward": false,
   "ip-masq": false,
   "log-driver": "local",
-  "storage-driver": "overlay2",
   "features": {
-    "containerd-snapshotter": false
+    "containerd-snapshotter": true
   },
   "containerd-namespace": "transcendence-restore",
   "containerd-plugins-namespace": "transcendence-restore-plugins"

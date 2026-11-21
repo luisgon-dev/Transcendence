@@ -6,7 +6,7 @@ This repo contains a .NET 11 backend (API + background worker) and a Next.js web
 
 - .NET SDK 11.0.100 (see `global.json`; stable patches within this SDK feature band are allowed)
 - Docker Desktop (recommended) or local:
-  - PostgreSQL 18 (Compose uses `postgres:18.7-alpine`, retaining `/var/lib/postgresql/18/docker`)
+  - PostgreSQL 18 (Compose pins the Docker Official PostgreSQL 18.7 Alpine image by OCI index, retaining `/var/lib/postgresql/18/docker`)
   - Redis 8 (Compose uses `redis:8-alpine`, retaining append-only data and Data Protection keys)
 - Node.js 26 (`.nvmrc`; matches the `node:26-bookworm-slim` web image and CI)
 - pnpm (repo pins `pnpm@10.22.0` in root `package.json`)

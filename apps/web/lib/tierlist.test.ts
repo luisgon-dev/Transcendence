@@ -6,10 +6,9 @@ import {
   decodeTierScopeConfidence,
   decodeTierGrade,
   decodeTierMovement,
-  deriveTierScopeConfidence,
   filterTierListEntries,
   formatStrengthDelta,
-  normalizeTierListEntries,
+  tierListBoardRows,
   summarizeTierListEntries
 } from "@/lib/tierlist";
 
@@ -72,109 +71,25 @@ describe("tier scope confidence", () => {
     expect(decodeTierScopeConfidence(99)).toBeNull();
   });
 
-  it("derives compatibility confidence from normalized entries", () => {
-    expect(deriveTierScopeConfidence([])).toBe("INSUFFICIENT");
-    expect(deriveTierScopeConfidence([{ tier: "B", isLowSample: true }])).toBe("INSUFFICIENT");
-    expect(
-      deriveTierScopeConfidence([
-        { tier: "B", isLowSample: false },
-        { tier: "B", isLowSample: false }
-      ])
-    ).toBe("FLAT");
-    expect(
-      deriveTierScopeConfidence([
-        { tier: "A", isLowSample: false },
-        { tier: "B", isLowSample: false }
-      ])
-    ).toBe("RESOLVED");
-  });
 });
 
-describe("normalizeTierListEntries", () => {
-  it("normalizes numeric enum payloads", () => {
-    const payload: components["schemas"]["TierListEntry"][] = [
+describe("tierListBoardRows", () => {
+  it("uses API ranks and grades and retains rows in the response order", () => {
+    const rows = tierListBoardRows([
       {
-        championId: 266,
-        role: "TOP",
-        tier: 0,
-        winRate: 0.52,
-        pickRate: 0.13,
-        banRate: 0.05,
-        games: 1240,
-        movement: 1,
-        previousTier: 1,
-        strengthScore: 0.032,
-        contestedScore: 0.21,
-        roleBaseline: 0.5,
-        isLowSample: false
-      }
-    ];
-
-    expect(normalizeTierListEntries(payload)).toEqual([
+        championId: 266, role: "TOP", tier: 0, grade: "S", rank: 1, games: 1240,
+        winRate: 0.52, pickRate: 0.13, banRate: 0.05, strengthScore: 0.032,
+        contestedScore: 0.21, roleBaseline: 0.5, isLowSample: false, movement: 1, previousTier: 1
+      },
       {
-        championId: 266,
-        role: "TOP",
-        tier: "S",
-        winRate: 0.52,
-        pickRate: 0.13,
-        banRate: 0.05,
-        games: 1240,
-        movement: "UP",
-        previousTier: "A",
-        strengthScore: 0.032,
-        contestedScore: 0.21,
-        isLowSample: false
+        championId: 103, role: "MIDDLE", tier: 2, grade: "B", rank: 2, games: 8,
+        winRate: 0.75, pickRate: 0.01, banRate: 0.05, strengthScore: 0.01,
+        contestedScore: 0.06, roleBaseline: 0.5, isLowSample: true
       }
     ]);
-  });
-
-  it("supports string enum payloads for compatibility and defaults missing fields", () => {
-    const payload = [
-      {
-        championId: 103,
-        role: "MIDDLE",
-        tier: "A",
-        winRate: 0.5,
-        pickRate: 0.08,
-        movement: "DOWN",
-        previousTier: "S"
-      }
-    ] as unknown as components["schemas"]["TierListEntry"][];
-
-    expect(normalizeTierListEntries(payload)).toEqual([
-      {
-        championId: 103,
-        role: "MIDDLE",
-        tier: "A",
-        winRate: 0.5,
-        pickRate: 0.08,
-        banRate: 0,
-        games: 0,
-        movement: "DOWN",
-        previousTier: "S",
-        strengthScore: 0,
-        contestedScore: 0,
-        isLowSample: false
-      }
-    ]);
-  });
-
-  it("drops entries with unknown tier and avoids throw", () => {
-    const payload = [
-      {
-        championId: 55,
-        role: "MIDDLE",
-        tier: 99,
-        movement: 0
-      }
-    ] as unknown as components["schemas"]["TierListEntry"][];
-
-    expect(normalizeTierListEntries(payload)).toEqual([]);
-  });
-
-  it("handles null or missing entries", () => {
-    expect(normalizeTierListEntries(null)).toEqual([]);
-    expect(normalizeTierListEntries(undefined)).toEqual([]);
+    expect(rows.map(({ championId, rank, tier, games, isLowSample }) => [championId, rank, tier, games, isLowSample]))
+      .toEqual([[266, 1, "S", 1240, false], [103, 2, "B", 8, true]]);
+    expect(rows[0]).toMatchObject({ movement: "UP", previousTier: "A", roleBaseline: 0.5 });
   });
 });
 

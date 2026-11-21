@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +12,7 @@ using Transcendence.Service.Core.Services.Analytics.Implementations;
 using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
 using Transcendence.WebAPI.Controllers;
+using Transcendence.WebAPI.Models;
 using MatchEntity = Transcendence.Data.Models.LoL.Match.Match;
 
 namespace Transcendence.WebAPI.Tests;
@@ -116,29 +118,56 @@ public class AnalyticsControllerTests
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
-    [Fact]
-    public async Task GetTierList_ForwardsPatchAndQueueFilters()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GetTierList_ReturnsRankedBoardForRequestedPatchAndQueue(bool includeLowSample)
     {
         await using var db = CreateDbContext();
         var service = new Mock<IChampionAnalyticsService>(MockBehavior.Strict);
         var publicationService = new Mock<IAnalyticsPublicationService>(MockBehavior.Strict);
         var publication = new AnalyticsPublication(new(AnalyticsPatchSelectionState.Ready, "15.2", "15.1", "15.1"));
+        var sample = new AnalyticsSampleMetadata(AnalyticsSampleStatus.Sufficient, 528, 40, 48, false,
+            AnalyticsPatchPhase.Maturing, false);
+        var scope = new TierListResponse("15.1", "ALL", "EMERALD_PLUS", "KR",
+            [
+                new(4, "ALL", TierGrade.B, 0, 1, 0.01, 0.01, 8, null, null, IsLowSample: true),
+                new(2, "ALL", TierGrade.S, 0.02, 0.54, 0.1, 0.05, 200, null, null),
+                new(1, "ALL", TierGrade.S, 0.01, 0.56, 0.1, 0.05, 200, null, null),
+                new(3, "ALL", TierGrade.C, -0.01, 0.49, 0.05, 0.02, 120, null, null)
+            ],
+            sample, QueueFamily: "ARAM", Confidence: TierScopeConfidence.RESOLVED, PatchSelection: publication.Selection);
         publicationService.Setup(x => x.ResolveAsync("aram", "15.1", It.IsAny<CancellationToken>(), "EMERALD_PLUS"))
             .ReturnsAsync(publication);
         service
             .Setup(x => x.GetPublishedTierListAsync("TOP", "EMERALD_PLUS", "KR", "aram", publication, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TierListResponse("15.1", "ALL", "EMERALD_PLUS", "KR", [], QueueFamily: "ARAM",
-                PatchSelection: publication.Selection));
+            .ReturnsAsync(scope);
         var controller = new AnalyticsController(
             service.Object,
             new AnalyticsPatchQueryService(db),
             Options.Create(new MultiRegionIngestionOptions()),
             publicationService.Object);
 
-        var result = await controller.GetTierList("TOP", "EMERALD_PLUS", "KR", "aram", "15.1", CancellationToken.None);
+        var result = includeLowSample
+            ? await controller.GetTierList("TOP", "EMERALD_PLUS", "KR", "aram", "15.1", includeLowSample: true)
+            : await controller.GetTierList("TOP", "EMERALD_PLUS", "KR", "aram", "15.1");
 
-        var payload = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<TierListResponse>().Subject;
+        var payload = result.Should().BeOfType<OkObjectResult>().Subject.Value
+            .Should().BeOfType<TierListBoardResponse>().Subject;
         payload.PatchSelection.Should().Be(publication.Selection);
+        payload.Sample.Should().Be(sample);
+        payload.LowSampleCount.Should().Be(1);
+        payload.TotalEntryCount.Should().Be(4);
+        payload.Confidence.Should().Be(TierScopeConfidence.RESOLVED);
+        payload.Entries.Select(entry => (entry.Rank, entry.ChampionId, entry.Grade, entry.Games))
+            .Should().Equal(includeLowSample
+                ? [(1, 2, "S", 200), (2, 1, "S", 200), (3, 4, "B", 8), (4, 3, "C", 120)]
+                : [(1, 2, "S", 200), (2, 1, "S", 200), (3, 3, "C", 120)]);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(payload, JsonSerializerOptions.Web));
+        var lastRow = json.RootElement.GetProperty("entries").EnumerateArray().Last();
+        lastRow.GetProperty("grade").GetString().Should().Be("C");
+        lastRow.GetProperty("rank").GetInt32().Should().Be(includeLowSample ? 4 : 3);
+        scope.Entries.Select(entry => entry.ChampionId).Should().Equal(4, 2, 1, 3);
         service.Verify(x => x.GetPublishedTierListAsync("TOP", "EMERALD_PLUS", "KR", "aram", publication, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -153,7 +182,7 @@ public class AnalyticsControllerTests
             Options.Create(new MultiRegionIngestionOptions()),
             new AnalyticsPublicationService(db));
 
-        var result = await controller.GetTierList(null, null, null, "normal", null, CancellationToken.None);
+        var result = await controller.GetTierList(queue: "normal", ct: CancellationToken.None);
 
         result.Should().BeOfType<BadRequestObjectResult>();
         service.VerifyNoOtherCalls();

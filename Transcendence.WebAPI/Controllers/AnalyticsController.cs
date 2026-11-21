@@ -5,6 +5,7 @@ using Transcendence.Service.Core.Services.Analytics.Interfaces;
 using Transcendence.Service.Core.Services.Analytics.Models;
 using Transcendence.Service.Core.Services.Analytics;
 using Transcendence.Service.Core.Services.Jobs.Configuration;
+using Transcendence.WebAPI.Models;
 
 namespace Transcendence.WebAPI.Controllers;
 
@@ -19,24 +20,25 @@ public class AnalyticsController(
     IAnalyticsPublicationService publicationService) : ControllerBase
 {
     /// <summary>
-    /// Get champion tier list ranked by composite score (70% win rate + 30% pick rate).
-    /// Returns S/A/B/C/D tiers with movement indicators from previous patch.
-    /// Data is cached for 24 hours.
+    /// Get the published champion tier list in display order, with grades and one-based ranks.
+    /// Rows below the scope's sample floor are hidden by default.
     /// </summary>
     /// <param name="role">Optional role filter (TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY). Leave empty for unified tier list across all roles.</param>
     /// <param name="rankTier">Optional rank tier filter (ALL, EMERALD_PLUS, MASTER_PLUS, or an individual tier from IRON through CHALLENGER)</param>
     /// <param name="region">Optional platform region filter (for example NA1, EUW1, KR). Defaults to ALL/global.</param>
     /// <param name="queue">Optional queue family. Defaults to ranked solo/duo.</param>
     /// <param name="patch">Optional patch version. Defaults to the newest published patch for the queue.</param>
+    /// <param name="includeLowSample">Include low-sample rows in the board. Counts and sample metadata describe the full scope in either view.</param>
     /// <param name="ct">Cancellation token</param>
     [HttpGet("tierlist")]
-    [ProducesResponseType(typeof(TierListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(TierListBoardResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetTierList(
         [FromQuery] string? role = null,
         [FromQuery] string? rankTier = null,
         [FromQuery] string? region = null,
         [FromQuery] string? queue = null,
         [FromQuery] string? patch = null,
+        [FromQuery] bool includeLowSample = false,
         CancellationToken ct = default)
     {
         if (!AnalyticsQueueCatalog.IsSupported(queue))
@@ -44,7 +46,7 @@ public class AnalyticsController(
 
         var publication = await publicationService.ResolveAsync(queue, patch, ct, rankTier);
         var tierList = await analyticsService.GetPublishedTierListAsync(role, rankTier, region, queue, publication, ct);
-        return Ok(tierList);
+        return Ok(TierListBoardResponse.From(tierList, includeLowSample));
     }
 
     [HttpGet("published-patches")]

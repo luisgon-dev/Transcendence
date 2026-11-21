@@ -6,9 +6,10 @@ import type { UITierListEntry } from "@/lib/tierlist";
 
 import { TierListTable } from "./TierListTable";
 
-const entries: UITierListEntry[] = [
+const entries: (UITierListEntry & { rank: number })[] = [
   {
     championId: 103,
+    rank: 1,
     role: "MIDDLE",
     tier: "S",
     winRate: 0.54,
@@ -23,6 +24,7 @@ const entries: UITierListEntry[] = [
   },
   {
     championId: 86,
+    rank: 2,
     role: "TOP",
     tier: "B",
     winRate: 0.49,
@@ -37,6 +39,7 @@ const entries: UITierListEntry[] = [
   },
   {
     championId: 17,
+    rank: 3,
     role: "TOP",
     tier: "B",
     winRate: 0.52,
@@ -57,18 +60,23 @@ const champions = {
   "17": { id: "Teemo", name: "Teemo", title: "the Swift Scout" }
 };
 
+const defaultBoard = {
+  entries: entries.slice(0, 2),
+  includeLowSample: false,
+  lowSampleCount: 1,
+  lowSampleHref: "/lol/tierlist?includeLowSample=true",
+  champions,
+  version: "16.14.1",
+  rankTierValue: "EMERALD_PLUS",
+  activeRegion: "ALL",
+  minGames: 500
+};
+
 describe("TierListTable", () => {
   it("filters by champion and renders a useful empty state", async () => {
     const user = userEvent.setup();
     render(
-      <TierListTable
-        entries={entries}
-        champions={champions}
-        version="16.14.1"
-        rankTierValue="EMERALD_PLUS"
-        activeRegion="ALL"
-        minGames={500}
-      />
+      <TierListTable {...defaultBoard} />
     );
 
     expect(screen.getByText("Ahri")).toBeTruthy();
@@ -83,21 +91,16 @@ describe("TierListTable", () => {
     await waitFor(() => expect(screen.getByText("Ahri")).toBeTruthy());
   });
 
-  it("reveals low-sample rows and exposes the active sort direction", async () => {
+  it("links to the expanded API board and renders its low-sample rows", async () => {
     const user = userEvent.setup();
-    render(
-      <TierListTable
-        entries={entries}
-        champions={champions}
-        version="16.14.1"
-        rankTierValue="EMERALD_PLUS"
-        activeRegion="ALL"
-        minGames={500}
-      />
-    );
+    const { rerender } = render(<TierListTable {...defaultBoard} />);
 
-    await user.click(screen.getByRole("button", { name: "Show low-sample (1)" }));
+    expect(screen.getByRole("link", { name: "Show low-sample (1)" }).getAttribute("href"))
+      .toBe("/lol/tierlist?includeLowSample=true");
+    rerender(<TierListTable {...defaultBoard} includeLowSample entries={entries} lowSampleHref="/lol/tierlist" />);
     expect(await screen.findByText("Teemo")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Hide low-sample (1)" }).getAttribute("href"))
+      .toBe("/lol/tierlist");
 
     const winRateSort = screen.getAllByRole("button", { name: /^Sort by Win Rate/ })[0];
     await user.click(winRateSort);
@@ -117,12 +120,8 @@ describe("TierListTable", () => {
     const user = userEvent.setup();
     const { container } = render(
       <TierListTable
-        entries={entries.map((entry) => ({ ...entry, roleBaseline: 0.505 }))}
-        champions={champions}
-        version="16.14.1"
-        rankTierValue="EMERALD_PLUS"
-        activeRegion="ALL"
-        minGames={500}
+        {...defaultBoard}
+        entries={defaultBoard.entries.map((entry) => ({ ...entry, roleBaseline: 0.505 }))}
       />
     );
 
@@ -141,14 +140,7 @@ describe("TierListTable", () => {
 
   it("renders champion squares through the image optimizer without next/image", () => {
     const { container } = render(
-      <TierListTable
-        entries={entries}
-        champions={champions}
-        version="16.14.1"
-        rankTierValue="EMERALD_PLUS"
-        activeRegion="ALL"
-        minGames={500}
-      />
+      <TierListTable {...defaultBoard} />
     );
 
     const icon = container.querySelector<HTMLImageElement>('img[alt="Ahri"]');

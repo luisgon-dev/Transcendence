@@ -30,10 +30,9 @@ import { encodeRiotIdPath } from "@/lib/riotid";
 import { LANE_ROLES } from "@/lib/roles";
 import { getAccessTokenOrRefresh } from "@/lib/sessionToken";
 import { championIconUrl, fetchChampionMap } from "@/lib/staticData";
-import { normalizeTierListEntries } from "@/lib/tierlist";
+import { tierListBoardRows, type TierListBoardResponse } from "@/lib/tierlist";
 import { getTrnClient } from "@/lib/trnClient";
 
-type TierListResponse = components["schemas"]["TierListResponse"];
 type RiotAccountLink = components["schemas"]["RiotAccountLinkDto"];
 type LaneRole = (typeof LANE_ROLES)[number];
 
@@ -100,8 +99,8 @@ type HomeLiveData = {
   version: string;
   champions: Awaited<ReturnType<typeof fetchChampionMap>>["champions"];
   patch: string | null;
-  patchSelection: TierListResponse["patchSelection"];
-  tierEntries: ReturnType<typeof normalizeTierListEntries>;
+  patchSelection: TierListBoardResponse["patchSelection"];
+  tierEntries: ReturnType<typeof tierListBoardRows>;
 };
 
 // The meta readout is best-effort. fetchChampionMap throws on a Data Dragon
@@ -114,7 +113,7 @@ async function loadHomeLiveData(): Promise<HomeLiveData> {
   try {
     const [{ version, champions }, tierListRes] = await Promise.all([
       fetchChampionMap(),
-      fetchBackendJson<TierListResponse>(
+      fetchBackendJson<TierListBoardResponse>(
         `${getBackendBaseUrl()}/api/lol/analytics/tierlist?rankTier=${DEFAULT_TIERLIST_RANK_TIER}`,
         { cache: "no-store" }
       )
@@ -126,7 +125,7 @@ async function loadHomeLiveData(): Promise<HomeLiveData> {
       champions,
       patch: patchSelection ? patchSelection.effectivePatch ?? null : tierListRes.body?.patch ?? null,
       patchSelection,
-      tierEntries: tierListRes.ok ? normalizeTierListEntries(tierListRes.body?.entries ?? []) : []
+      tierEntries: tierListRes.ok ? tierListBoardRows(tierListRes.body?.entries ?? []) : []
     };
   } catch {
     return { version: "", champions: {}, patch: null, patchSelection: null, tierEntries: [] };

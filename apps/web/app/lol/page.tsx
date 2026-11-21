@@ -1,6 +1,5 @@
 import Image from "next/image";
 import Link from "next/link";
-import type { components } from "@transcendence/api-client/schema";
 
 import { AnalyticsPatchNotice } from "@/components/AnalyticsPatchNotice";
 import { Badge } from "@/components/ui/Badge";
@@ -15,9 +14,8 @@ import { formatGames, formatPercent } from "@/lib/format";
 import { championDisplayName } from "@/lib/gameDisplay";
 import { roleDisplayLabel } from "@/lib/roles";
 import { championIconUrl, fetchChampionMap } from "@/lib/staticData";
-import { normalizeTierListEntries } from "@/lib/tierlist";
+import { tierListBoardRows, type TierListBoardResponse } from "@/lib/tierlist";
 
-type TierListResponse = components["schemas"]["TierListResponse"];
 const EXAMPLE_SUMMONER_HREF = "/lol/summoners/kr/Hide%20on%20bush-KR1";
 
 const SECONDARY_LINKS = [
@@ -42,7 +40,7 @@ export default async function HomePage({
   if (activeRegion !== "ALL") tierListQuery.set("region", activeRegion);
   const [{ version, champions }, tierListRes] = await Promise.all([
     fetchChampionMap(),
-    fetchBackendJson<TierListResponse>(`${getBackendBaseUrl()}/api/lol/analytics/tierlist?${tierListQuery.toString()}`, {
+    fetchBackendJson<TierListBoardResponse>(`${getBackendBaseUrl()}/api/lol/analytics/tierlist?${tierListQuery.toString()}`, {
       cache: "no-store"
     })
   ]);
@@ -50,7 +48,7 @@ export default async function HomePage({
   const patchSelection = tierListRes.body?.patchSelection;
   const patch = patchSelection ? patchSelection.effectivePatch : tierListRes.body?.patch;
   const entries = tierListRes.ok
-    ? normalizeTierListEntries(tierListRes.body?.entries ?? [])
+    ? tierListBoardRows(tierListRes.body?.entries ?? [])
     : [];
   const topRows = entries.slice(0, 8);
   const trendingRows = entries

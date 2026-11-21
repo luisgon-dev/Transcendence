@@ -1,5 +1,3 @@
-import type { components } from "@transcendence/api-client";
-
 import { AnalyticsPatchFilter } from "@/components/AnalyticsPatchFilter";
 import { AnalyticsPatchNotice } from "@/components/AnalyticsPatchNotice";
 import { AnalyticsSampleBanner } from "@/components/AnalyticsSampleBanner";
@@ -17,11 +15,10 @@ import { normalizeAnalyticsPatch } from "@/lib/lolPatchFilters";
 import { DEFAULT_TIERLIST_RANK_TIER } from "@/lib/ranks";
 import { fetchChampionMap } from "@/lib/staticData";
 import {
-  normalizeTierListEntries,
+  tierListBoardRows,
+  type TierListBoardResponse,
   type UITierGrade
 } from "@/lib/tierlist";
-
-type TierListResponse = components["schemas"]["TierListResponse"];
 
 export default async function ChampionsPage({
   searchParams
@@ -31,13 +28,14 @@ export default async function ChampionsPage({
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const verbosity = getErrorVerbosity();
   const tierListQuery = new URLSearchParams({
-    rankTier: DEFAULT_TIERLIST_RANK_TIER
+    rankTier: DEFAULT_TIERLIST_RANK_TIER,
+    includeLowSample: "true"
   });
   const selectedPatch = normalizeAnalyticsPatch(resolvedSearchParams.patch);
   if (selectedPatch) tierListQuery.set("patch", selectedPatch);
   const [{ version, champions }, tierListRes, patchOptions] = await Promise.all([
     fetchChampionMap(),
-    fetchBackendJson<TierListResponse>(
+    fetchBackendJson<TierListBoardResponse>(
       `${getBackendBaseUrl()}/api/lol/analytics/tierlist?${tierListQuery.toString()}`,
       { cache: "no-store" }
     ),
@@ -72,7 +70,7 @@ export default async function ChampionsPage({
   >();
 
   if (tierListRes.body) {
-    const entries = normalizeTierListEntries(tierListRes.body.entries);
+    const entries = tierListBoardRows(tierListRes.body.entries);
     for (const entry of entries) {
       const existing = tierMap.get(entry.championId);
       // Keep the entry with the most games (most relevant role)

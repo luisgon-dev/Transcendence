@@ -1086,6 +1086,7 @@ export interface paths {
                     region?: string;
                     queue?: string;
                     patch?: string;
+                    includeLowSample?: boolean;
                 };
                 header?: never;
                 path?: never;
@@ -1099,9 +1100,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["TierListResponse"];
-                        "application/json": components["schemas"]["TierListResponse"];
-                        "text/json": components["schemas"]["TierListResponse"];
+                        "text/plain": components["schemas"]["TierListBoardResponse"];
+                        "application/json": components["schemas"]["TierListBoardResponse"];
+                        "text/json": components["schemas"]["TierListBoardResponse"];
                     };
                 };
                 /** @description Too Many Requests */
@@ -6973,7 +6974,7 @@ export interface components {
          * @enum {integer}
          */
         TierGrade: 0 | 1 | 2 | 3 | 4;
-        TierListEntry: {
+        TierListBoardEntry: {
             /** Format: int32 */
             championId: number;
             role: string;
@@ -6995,19 +6996,26 @@ export interface components {
             /** Format: double */
             roleBaseline: number;
             isLowSample: boolean;
+            /** Format: int32 */
+            rank: number;
+            grade: string;
         };
-        TierListResponse: {
+        TierListBoardResponse: {
             patch: string;
             role?: string | null;
             rankTier?: string | null;
             region: string;
-            entries: components["schemas"]["TierListEntry"][];
+            entries: components["schemas"]["TierListBoardEntry"][];
             sample?: components["schemas"]["AnalyticsSampleMetadata"] | null;
             /** Format: date-time */
             computedAtUtc?: string | null;
             queueFamily: string;
             confidence: components["schemas"]["TierScopeConfidence"];
             patchSelection?: components["schemas"]["AnalyticsPatchSelection"] | null;
+            /** Format: int32 */
+            lowSampleCount: number;
+            /** Format: int32 */
+            totalEntryCount: number;
         };
         /**
          * Format: int32

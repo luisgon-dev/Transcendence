@@ -1163,6 +1163,14 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "includeLowSample",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
           }
         ],
         "responses": {
@@ -1171,17 +1179,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/TierListResponse"
+                  "$ref": "#/components/schemas/TierListBoardResponse"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TierListResponse"
+                  "$ref": "#/components/schemas/TierListBoardResponse"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TierListResponse"
+                  "$ref": "#/components/schemas/TierListBoardResponse"
                 }
               }
             }
@@ -12373,14 +12381,16 @@
         "type": "integer",
         "format": "int32"
       },
-      "TierListEntry": {
+      "TierListBoardEntry": {
         "required": [
           "banRate",
           "championId",
           "contestedScore",
           "games",
+          "grade",
           "isLowSample",
           "pickRate",
+          "rank",
           "role",
           "roleBaseline",
           "strengthScore",
@@ -12449,17 +12459,26 @@
           },
           "isLowSample": {
             "type": "boolean"
+          },
+          "rank": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "grade": {
+            "type": "string"
           }
         },
         "additionalProperties": false
       },
-      "TierListResponse": {
+      "TierListBoardResponse": {
         "required": [
           "confidence",
           "entries",
+          "lowSampleCount",
           "patch",
           "queueFamily",
-          "region"
+          "region",
+          "totalEntryCount"
         ],
         "type": "object",
         "properties": {
@@ -12480,7 +12499,7 @@
           "entries": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/TierListEntry"
+              "$ref": "#/components/schemas/TierListBoardEntry"
             }
           },
           "sample": {
@@ -12513,6 +12532,14 @@
               }
             ],
             "nullable": true
+          },
+          "lowSampleCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalEntryCount": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false

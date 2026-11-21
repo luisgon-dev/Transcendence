@@ -29,15 +29,19 @@ import { socialImageUrl } from "@/lib/seo";
 import { fetchChampionMap } from "@/lib/staticData";
 import {
   decodeTierScopeConfidence,
-  deriveTierScopeConfidence,
-  normalizeTierListEntries,
-  type TierListResponseLike
+  tierListBoardRows,
+  type TierListBoardResponse
 } from "@/lib/tierlist";
 import { UpdatedAgo } from "@/components/UpdatedAgo";
 
-type TierListResponse = TierListResponseLike;
-
-type TierListSearchParams = { role?: string; rankTier?: string; region?: string; patch?: string; queue?: string };
+type TierListSearchParams = {
+  role?: string;
+  rankTier?: string;
+  region?: string;
+  patch?: string;
+  queue?: string;
+  includeLowSample?: string;
+};
 
 export async function generateMetadata({
   searchParams
@@ -90,6 +94,7 @@ export default async function TierListPage({
   const roleParam = queueOption.hasRoles ? (resolvedSearchParams?.role ?? "").toUpperCase() : "ALL";
   const selectedPatch = normalizeAnalyticsPatch(resolvedSearchParams?.patch);
   const effectiveRankParam = resolveDefaultedRankTier(resolvedSearchParams.rankTier);
+  const includeLowSample = resolvedSearchParams.includeLowSample === "true";
 
   const verbosity = getErrorVerbosity();
   const fetchTierList = async (region: string) => {
@@ -99,8 +104,9 @@ export default async function TierListPage({
     if (region !== GLOBAL_ANALYTICS_REGION) requestQuery.set("region", region);
     if (selectedPatch) requestQuery.set("patch", selectedPatch);
     if (activeQueue !== "solo") requestQuery.set("queue", activeQueue);
+    if (includeLowSample) requestQuery.set("includeLowSample", "true");
 
-    return fetchBackendJson<TierListResponse>(
+    return fetchBackendJson<TierListBoardResponse>(
       `${getBackendBaseUrl()}/api/lol/analytics/tierlist?${requestQuery.toString()}`,
       { cache: "no-store" }
     );
@@ -117,7 +123,8 @@ export default async function TierListPage({
   const sharedFilterParams = {
     ...(activeRegion !== GLOBAL_ANALYTICS_REGION ? { region: activeRegion } : {}),
     ...(selectedPatch ? { patch: selectedPatch } : {}),
-    ...(activeQueue !== "solo" ? { queue: activeQueue } : {})
+    ...(activeQueue !== "solo" ? { queue: activeQueue } : {}),
+    ...(includeLowSample ? { includeLowSample: "true" } : {})
   };
 
   if (!res.ok) {
@@ -164,7 +171,7 @@ export default async function TierListPage({
   const patchSelection = tierlist.patchSelection;
   const ready = !patchSelection || patchSelection.state === "Ready";
   const { version, champions } = ready ? await fetchChampionMap() : { version: "", champions: {} };
-  const normalizedEntries = normalizeTierListEntries(tierlist.entries);
+  const entries = tierListBoardRows(tierlist.entries);
 
   const rankTierValue =
     typeof tierlist.rankTier === "string" && tierlist.rankTier.toLowerCase() !== "all"
@@ -176,21 +183,14 @@ export default async function TierListPage({
   // recommended games floor. Undefined when no sample (confidence falls back to its default).
   const minGames = normalizeAnalyticsSample(sample)?.minimumRecommendedSampleSize;
 
-  // roleBaseline (the role-average win rate) rides the wire on each TierListEntry but is
-  // dropped by normalizeTierListEntries; re-attach it by (champion, role) so the EB trust
-  // hover can name the role average without re-fetching.
-  const roleBaselineByKey = new Map<string, number>();
-  for (const raw of tierlist.entries ?? []) {
-    if (typeof raw.championId !== "number" || typeof raw.roleBaseline !== "number") continue;
-    const role = typeof raw.role === "string" && raw.role ? raw.role.toUpperCase() : "ALL";
-    roleBaselineByKey.set(`${raw.championId}-${role}`, raw.roleBaseline);
+  const tierScopeConfidence = decodeTierScopeConfidence(tierlist.confidence);
+  const toggleParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(resolvedSearchParams)) {
+    if (typeof value === "string") toggleParams.set(key, value);
   }
-  const entriesWithBaseline = normalizedEntries.map((entry) => ({
-    ...entry,
-    roleBaseline: roleBaselineByKey.get(`${entry.championId}-${entry.role.toUpperCase()}`) ?? 0
-  }));
-  const tierScopeConfidence =
-    decodeTierScopeConfidence(tierlist.confidence) ?? deriveTierScopeConfidence(entriesWithBaseline);
+  if (includeLowSample) toggleParams.delete("includeLowSample");
+  else toggleParams.set("includeLowSample", "true");
+  const lowSampleHref = toggleParams.size ? `/lol/tierlist?${toggleParams}` : "/lol/tierlist";
 
   return (
     <div className="grid gap-4">
@@ -216,7 +216,7 @@ export default async function TierListPage({
             {ready ? (
               <>
                 <span aria-hidden="true">·</span>
-                <span className="type-tabular tabular-nums">{normalizedEntries.length} champions</span>
+                <span className="type-tabular tabular-nums">{tierlist.totalEntryCount} champions</span>
               </>
             ) : null}
             {tierlist.computedAtUtc ? (
@@ -261,7 +261,7 @@ export default async function TierListPage({
         />
       ) : null}
 
-      {ready && tierScopeConfidence !== "RESOLVED" ? (
+      {ready && tierScopeConfidence && tierScopeConfidence !== "RESOLVED" ? (
         <Card
           role="status"
           className="border-warning/40 bg-warning/10 px-4 py-3"
@@ -283,7 +283,10 @@ export default async function TierListPage({
 
       {ready ? (
         <TierListTable
-          entries={entriesWithBaseline}
+          entries={entries}
+          lowSampleCount={tierlist.lowSampleCount}
+          includeLowSample={includeLowSample}
+          lowSampleHref={lowSampleHref}
           champions={champions}
           version={version}
           rankTierValue={rankTierValue}

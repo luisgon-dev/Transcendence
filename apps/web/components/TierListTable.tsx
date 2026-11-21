@@ -6,6 +6,7 @@ import Link from "next/link";
 
 import { TierBadge } from "@/components/TierBadge";
 import { Button } from "@/components/ui/Button";
+import { buttonClassName } from "@/components/ui/buttonStyles";
 import { Card } from "@/components/ui/Card";
 import { ChampionIcon } from "@/components/ui/ChampionIcon";
 import { ConfidenceBadge } from "@/components/ui/Confidence";
@@ -40,8 +41,7 @@ type SortColumn = "rank" | "winRate" | "pickRate" | "banRate" | "games" | "conte
 type SortDir = "asc" | "desc";
 // roleBaseline (role-average win rate) is threaded in from the page so the EB trust
 // hover can name the role average; it is not part of the normalized UI entry.
-type TierListTableEntry = UITierListEntry & { roleBaseline?: number };
-type RowEntry = TierListTableEntry & { rank: number };
+type RowEntry = UITierListEntry & { roleBaseline?: number; rank: number };
 
 type DocumentWithViewTransition = Document & {
   startViewTransition?: typeof startTransition;
@@ -93,6 +93,9 @@ function startVisualTransition(update: () => void) {
 
 export function TierListTable({
   entries,
+  lowSampleCount,
+  includeLowSample,
+  lowSampleHref,
   champions,
   version,
   rankTierValue,
@@ -102,7 +105,10 @@ export function TierListTable({
   showRoles = true,
   minGames
 }: {
-  entries: TierListTableEntry[];
+  entries: RowEntry[];
+  lowSampleCount: number;
+  includeLowSample: boolean;
+  lowSampleHref: string;
   champions: TierListChampionMap;
   version: string;
   rankTierValue: string | null;
@@ -116,7 +122,6 @@ export function TierListTable({
   const [sortCol, setSortCol] = useState<SortColumn>("rank");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [focusTier, setFocusTier] = useState<TierListFocusTier>("ALL");
-  const [showLowSample, setShowLowSample] = useState(false);
   const [query, setQuery] = useState("");
   // Deferred so typing stays smooth while React re-filters/re-groups a 170+ row table.
   const deferredQuery = useDeferredValue(query);
@@ -129,36 +134,21 @@ export function TierListTable({
     D: null
   });
 
-  const lowSampleCount = useMemo(() => entries.filter((entry) => entry.isLowSample).length, [entries]);
-
-  // Hide low-sample champions by default. On thin / early-patch data most champion-role cells fall below the
-  // games floor (capped at B) and bury the few with real signal; the toggle reveals them.
-  const baseEntries = useMemo(
-    () => (showLowSample ? entries : entries.filter((entry) => !entry.isLowSample)),
-    [entries, showLowSample]
-  );
-
-  const entriesWithRank = useMemo<RowEntry[]>(
-    () => baseEntries.map((entry, index) => ({ ...entry, rank: index + 1 })),
-    [baseEntries]
-  );
-
   const filteredEntries = useMemo(
-    () => filterTierListEntries(entriesWithRank, champions, { query: deferredQuery, focusTier }),
-    [entriesWithRank, champions, deferredQuery, focusTier]
+    () => filterTierListEntries(entries, champions, { query: deferredQuery, focusTier }),
+    [entries, champions, deferredQuery, focusTier]
   );
 
   const sortedEntries = useMemo(() => {
     if (sortCol === "rank") {
-      const sorted = [...filteredEntries].sort((a, b) => a.rank - b.rank);
-      return sortDir === "desc" ? sorted.reverse() : sorted;
+      return sortDir === "desc" ? [...filteredEntries].reverse() : filteredEntries;
     }
 
     const sorted = [...filteredEntries].sort((a, b) => a[sortCol] - b[sortCol]);
     return sortDir === "desc" ? sorted.reverse() : sorted;
   }, [filteredEntries, sortCol, sortDir]);
 
-  const allSummary = useMemo(() => summarizeTierListEntries(entriesWithRank), [entriesWithRank]);
+  const allSummary = useMemo(() => summarizeTierListEntries(entries), [entries]);
   const summary = useMemo(() => summarizeTierListEntries(filteredEntries), [filteredEntries]);
   const isDefaultSort = sortCol === "rank" && sortDir === "asc";
   const isFilteredView = focusTier !== "ALL" || !isDefaultSort;
@@ -169,9 +159,11 @@ export function TierListTable({
   const groups = useMemo(() => {
     if (!isDefaultSort) return null;
 
-    const grouped: Record<UITierGrade, RowEntry[]> = { S: [], A: [], B: [], C: [], D: [] };
+    const grouped = new Map<UITierGrade, RowEntry[]>();
     for (const entry of sortedEntries) {
-      grouped[entry.tier].push(entry);
+      const rows = grouped.get(entry.tier) ?? [];
+      rows.push(entry);
+      grouped.set(entry.tier, rows);
     }
     return grouped;
   }, [isDefaultSort, sortedEntries]);
@@ -449,7 +441,7 @@ export function TierListTable({
   const spineItems = useMemo(
     () =>
       visibleTiers.map((tier) => {
-        const tierEntries = groups?.[tier] ?? [];
+        const tierEntries = groups?.get(tier) ?? [];
         const bestWr = tierEntries.length
           ? Math.max(...tierEntries.map((e) => e.winRate))
           : null;
@@ -506,16 +498,14 @@ export function TierListTable({
             </span>
           ) : null}
           {lowSampleCount > 0 ? (
-            <Button
-              variant={showLowSample ? "outline" : "ghost"}
-              size="sm"
-              onClick={() => setShowLowSample((value) => !value)}
-              className="ml-1 h-8 px-3"
-              aria-pressed={showLowSample}
-              title="Low-sample champions are below the games floor (capped at B) — hidden by default"
+            <Link
+              href={lowSampleHref}
+              prefetch={false}
+              scroll={false}
+              className={buttonClassName({ variant: includeLowSample ? "outline" : "ghost", size: "sm", className: "ml-1 h-8 px-3" })}
             >
-              {showLowSample ? "Hide" : "Show"} low-sample ({lowSampleCount})
-            </Button>
+              {includeLowSample ? "Hide" : "Show"} low-sample ({lowSampleCount})
+            </Link>
           ) : null}
           <Button
             variant={sortCol === "contestedScore" ? "outline" : "ghost"}
@@ -547,15 +537,16 @@ export function TierListTable({
                 Clear search
               </Button>
             </>
-          ) : !showLowSample && lowSampleCount > 0 ? (
+          ) : !includeLowSample && entries.length === 0 && lowSampleCount > 0 ? (
             <>
               <p className="type-section text-fg">Every champion in this view is low-sample.</p>
               <p className="type-ui text-muted">
                 Not enough games yet for a confident grade. Show them (capped at B) or pick a wider scope.
               </p>
-              <Button variant="outline" size="sm" onClick={() => setShowLowSample(true)} className="w-fit">
+              <Link href={lowSampleHref} prefetch={false} scroll={false}
+                className={buttonClassName({ variant: "outline", size: "sm", className: "w-fit" })}>
                 Show {lowSampleCount} low-sample
-              </Button>
+              </Link>
             </>
           ) : (
             <>
@@ -583,10 +574,7 @@ export function TierListTable({
           <Card className="overflow-clip p-0">
             {isDefaultSort && groups ? (
               <div className="grid">
-                {TIER_ORDER.map((tier, tierIdx) => {
-                  const tierEntries = groups[tier];
-                  if (tierEntries.length === 0) return null;
-
+                {[...groups].map(([tier, tierEntries], tierIdx) => {
                   return (
                     <section
                       key={tier}

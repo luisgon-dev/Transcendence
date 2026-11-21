@@ -46,15 +46,16 @@ export type TierListSummary = {
   tierCounts: Record<UITierGrade, number>;
 };
 
-type ApiTierListEntry = components["schemas"]["TierListEntry"];
+export type TierListBoardResponse = components["schemas"]["TierListBoardResponse"];
 
-// Mirrors the tier-list response with the fields we read off it. `computedAtUtc`
-// is the ISO-8601 UTC timestamp (or null) of when the precomputed analytics for
-// the patch were last refreshed; it powers the "Updated N min ago" indicator.
-export type TierListResponseLike = components["schemas"]["TierListResponse"] & {
-  computedAtUtc?: string | null;
-  confidence?: number | string | null;
-};
+export function tierListBoardRows(entries: TierListBoardResponse["entries"]) {
+  return entries.map((entry) => ({
+    ...entry,
+    tier: entry.grade as UITierGrade,
+    movement: decodeTierMovement(entry.movement),
+    previousTier: decodeTierGrade(entry.previousTier)
+  }));
+}
 
 export const TIER_ORDER: UITierGrade[] = ["S", "A", "B", "C", "D"];
 
@@ -127,18 +128,6 @@ export function decodeTierScopeConfidence(
   }
 }
 
-/** Derives the server's scope-level confidence signal for compatibility with an older API response. */
-export function deriveTierScopeConfidence(
-  entries: Pick<UITierListEntry, "tier" | "isLowSample">[]
-): UITierScopeConfidence {
-  if (entries.length === 0 || entries.every((entry) => entry.isLowSample)) {
-    return "INSUFFICIENT";
-  }
-
-  const firstTier = entries[0].tier;
-  return entries.every((entry) => entry.tier === firstTier) ? "FLAT" : "RESOLVED";
-}
-
 function asFiniteNumber(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
@@ -146,39 +135,6 @@ function asFiniteNumber(value: unknown, fallback = 0): number {
 function asNonNegativeInteger(value: unknown, fallback = 0): number {
   const n = asFiniteNumber(value, fallback);
   return n > 0 ? Math.floor(n) : 0;
-}
-
-export function normalizeTierListEntries(
-  rawEntries: ApiTierListEntry[] | null | undefined
-): UITierListEntry[] {
-  if (!rawEntries || rawEntries.length === 0) return [];
-
-  const entries: UITierListEntry[] = [];
-
-  for (const raw of rawEntries) {
-    const tier = decodeTierGrade(raw.tier);
-    if (!tier) continue;
-
-    const championId = asFiniteNumber(raw.championId, Number.NaN);
-    if (!Number.isInteger(championId) || championId <= 0) continue;
-
-    entries.push({
-      championId,
-      role: typeof raw.role === "string" && raw.role ? raw.role : "ALL",
-      tier,
-      winRate: asFiniteNumber(raw.winRate, 0),
-      pickRate: asFiniteNumber(raw.pickRate, 0),
-      banRate: asFiniteNumber(raw.banRate, 0),
-      games: asNonNegativeInteger(raw.games, 0),
-      movement: decodeTierMovement(raw.movement),
-      previousTier: decodeTierGrade(raw.previousTier),
-      strengthScore: asFiniteNumber(raw.strengthScore, 0),
-      contestedScore: asFiniteNumber(raw.contestedScore, 0),
-      isLowSample: raw.isLowSample === true
-    });
-  }
-
-  return entries;
 }
 
 type ApiChampionGrade = components["schemas"]["ChampionGradeDto"];

@@ -65,7 +65,14 @@ function fixture(url) {
     }));
   }
   if (url.pathname === "/api/lol/analytics/tierlist") {
-    return { patch, patchSelection, rankTier, region, queueFamily, entries: data ? [grade(patch)] : [] };
+    const entries = data ? [{ ...grade(patch), rank: 1, grade: "A" }] : [];
+    if (data && url.searchParams.get("includeLowSample") === "true") {
+      entries.push({ ...grade(patch), championId: 222, games: 8, isLowSample: true, tier: 2, rank: 2, grade: "B" });
+    }
+    return {
+      patch, patchSelection, role, rankTier, region, queueFamily, entries, confidence: data ? 0 : 2,
+      totalEntryCount: data ? 2 : 0, lowSampleCount: data ? 1 : 0
+    };
   }
   if (url.pathname === "/api/lol/analytics/champions/51/profile") {
     profileRequests.push(new URLSearchParams(url.search));
@@ -153,6 +160,15 @@ try {
   const page = await browser.newPage({ viewport: { width: 1360, height: 1050 } });
   const oldBanner = page.getByRole("status")
     .getByText("Showing patch 16.22 while 16.23 stats are calculated.", { exact: true });
+  await page.goto(`${origin}/lol/tierlist?role=BOTTOM&rankTier=EMERALD_PLUS`);
+  const tierRows = page.locator("table tbody tr");
+  await expect(tierRows).toHaveCount(1);
+  await page.getByRole("link", { name: "Show low-sample (1)" }).click();
+  await expect(page).toHaveURL(/role=BOTTOM&rankTier=EMERALD_PLUS&includeLowSample=true/);
+  await expect(tierRows).toHaveCount(2);
+  await expect(tierRows.last()).toContainText("Jinx");
+  await page.getByRole("link", { name: "Hide low-sample (1)" }).click();
+  await expect(tierRows).toHaveCount(1);
   await page.goto(`${origin}/lol`);
   await expect(oldBanner).toBeVisible();
   await page.goto(`${origin}/lol/champions`);

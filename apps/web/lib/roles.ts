@@ -17,8 +17,8 @@ export function roleDisplayLabel(role: string | null | undefined): string {
     ALL: "All",
     TOP: "Top",
     JUNGLE: "Jungle",
-    MIDDLE: "Middle",
-    BOTTOM: "Bottom",
+    MIDDLE: "Mid",
+    BOTTOM: "Bot",
     UTILITY: "Support",
     SUPPORT: "Support",
     UNKNOWN: "Unknown"

@@ -53,7 +53,7 @@ export const metadata: Metadata = {
     images: [
       {
         url: socialImageUrl(
-          "League analytics you can trust",
+          "League of Legends stats",
           SITE_NAME,
           "Tier lists, builds, matchups, and player profiles"
         ),
@@ -69,7 +69,7 @@ export const metadata: Metadata = {
     description: "League of Legends stats, builds, runes, and player profiles.",
     images: [
       socialImageUrl(
-        "League analytics you can trust",
+        "League of Legends stats",
         SITE_NAME,
         "Tier lists, builds, matchups, and player profiles"
       )

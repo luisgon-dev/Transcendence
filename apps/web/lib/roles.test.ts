@@ -7,8 +7,8 @@ describe("roleDisplayLabel", () => {
     expect(roleDisplayLabel("ALL")).toBe("All");
     expect(roleDisplayLabel("TOP")).toBe("Top");
     expect(roleDisplayLabel("JUNGLE")).toBe("Jungle");
-    expect(roleDisplayLabel("MIDDLE")).toBe("Middle");
-    expect(roleDisplayLabel("BOTTOM")).toBe("Bottom");
+    expect(roleDisplayLabel("MIDDLE")).toBe("Mid");
+    expect(roleDisplayLabel("BOTTOM")).toBe("Bot");
     expect(roleDisplayLabel("UTILITY")).toBe("Support");
     expect(roleDisplayLabel("support")).toBe("Support");
   });

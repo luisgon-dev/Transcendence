@@ -137,7 +137,7 @@ export default async function ProBuildsIndexPage({
   if (!playrateRes.ok && !rosterRes.ok) {
     return (
       <BackendErrorCard
-        title="Pro Solo Q"
+        title="Pro Solo Queue"
         message={
           playrateRes.errorKind === "timeout"
             ? "This page is taking too long to load."
@@ -196,7 +196,7 @@ export default async function ProBuildsIndexPage({
   return (
     <div className="grid grid-cols-1 gap-4">
       <Toolbar
-        title="Pro Solo Q"
+        title="Pro Solo Queue"
         meta={
           <>
             {patch ? <span>Patch {patch}</span> : null}
@@ -280,15 +280,15 @@ export default async function ProBuildsIndexPage({
         <section aria-labelledby="pro-picks-heading" className="page-panel overflow-hidden">
           <div className="px-4 py-4 sm:px-5">
             <h2 id="pro-picks-heading" className="type-title text-fg">
-              What pros are playing
+              Most played champions
             </h2>
             <p className="type-caption mt-1 text-muted">
-              Ranked Solo/Duo on tracked accounts this patch; tournament games are not included.
+              This patch’s Ranked Solo/Duo games from the selected accounts.
             </p>
           </div>
           {playrateChampions.length === 0 ? (
             <p className="border-t border-border px-5 py-6 text-sm text-muted">
-              No tracked solo-queue picks for this region and scope yet.
+              No tracked games match these filters yet.
             </p>
           ) : (
             <div className="overflow-x-auto border-t border-border">
@@ -495,8 +495,8 @@ async function RecentProMatches({
     .slice(0, MAX_FEED_ROWS);
   const failedFeedCount = proResponses.length - successfulFeeds.length;
   const subtitle = searching
-    ? "Recent tracked games on the champions you searched."
-    : "Recent tracked games on the champions pros play most.";
+    ? "Recent games for the champions in your search."
+    : "Recent games on the most played champions.";
 
   return (
     <section aria-labelledby="pro-feed-heading" className="page-panel overflow-hidden">

@@ -46,7 +46,7 @@ export function ChampionsGridClient({
         type="text"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search champions..."
+        placeholder="Search champions"
         className="control-input max-w-sm"
       />
 
@@ -67,9 +67,9 @@ export function ChampionsGridClient({
                     {c.name}
                   </p>
                   <div className="mt-0.5 flex min-h-[18px] items-center gap-1.5">
-                    {c.tier ? <TierBadge tier={c.tier} /> : <span className="type-caption text-muted">Tier -</span>}
+                    {c.tier ? <TierBadge tier={c.tier} /> : <span className="type-caption text-muted">Tier unavailable</span>}
                     <span className="type-caption text-muted">
-                      {c.primaryRole ? roleDisplayLabel(c.primaryRole) : "Role -"}
+                      {c.primaryRole ? roleDisplayLabel(c.primaryRole) : "Role unavailable"}
                     </span>
                   </div>
                   <div className="mt-0.5 min-h-[18px]">
@@ -80,7 +80,7 @@ export function ChampionsGridClient({
                         className="text-xs"
                       />
                     ) : (
-                      <span className="text-xs text-muted">Win Rate -</span>
+                      <span className="text-xs text-muted">Win rate unavailable</span>
                     )}
                   </div>
                 </div>

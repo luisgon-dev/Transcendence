@@ -100,15 +100,15 @@ function props(overrides: TestOverrides = {}): React.ComponentProps<typeof Match
 describe("MatchHistorySection", () => {
   it("distinguishes loading, a genuinely empty history, and an empty filtered result", () => {
     const { rerender } = render(<MatchHistorySection {...props({ historyBusy: true })} />);
-    expect(screen.queryByText("No matches found for the current queue/champion filters.")).toBeNull();
+    expect(screen.queryByText("No matches found for these filters. Try a different queue or champion.")).toBeNull();
 
     rerender(<MatchHistorySection {...props()} />);
     expect(
-      screen.getByText("No ranked matches are recorded yet. Use Update Now to fetch the latest history.")
+      screen.getByText("No ranked matches are on file. Refresh the profile to fetch recent games.")
     ).toBeTruthy();
 
     rerender(<MatchHistorySection {...props({ queue: "RANKED_SOLO_DUO" })} />);
-    expect(screen.getByText("No matches found for the current queue/champion filters.")).toBeTruthy();
+    expect(screen.getByText("No matches found for these filters. Try a different queue or champion.")).toBeTruthy();
   });
 
   it("renders errors and forwards pagination/filter actions", async () => {
@@ -167,7 +167,7 @@ describe("MatchHistorySection", () => {
         })}
       />
     );
-    expect(screen.queryByText("Detailed stats are unavailable for this match.")).toBeNull();
+    expect(screen.queryByText("This match has no detailed stats on file.")).toBeNull();
     await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(onRetryDetail).toHaveBeenCalledWith(MATCH.matchId);
 
@@ -176,7 +176,7 @@ describe("MatchHistorySection", () => {
         {...props({ visibleMatches: [MATCH], expansion: { expandedMatchId: MATCH.matchId, details: { [MATCH.matchId]: null } } })}
       />
     );
-    expect(screen.getByText("Detailed stats are unavailable for this match.")).toBeTruthy();
+    expect(screen.getByText("This match has no detailed stats on file.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
   });
 });

@@ -31,7 +31,7 @@ export async function generateMetadata({
   const champion = champions[championId];
   return {
     title: `${champion?.name ?? "Champion"} Build Lab`,
-    description: `Gold-adjusted win rates for every item, rune, and spell choice on ${champion?.name ?? "this champion"}.`
+    description: `Gold-adjusted win rates for items, runes, and spells on ${champion?.name ?? "this champion"}.`
   };
 }
 
@@ -49,7 +49,7 @@ export default async function ChampionBuildLabPage({
   ]);
   const championId = Number(rawChampionId);
   if (!Number.isInteger(championId) || championId <= 0) {
-    return <BackendErrorCard title="Build Lab" message="That champion route is invalid." />;
+    return <BackendErrorCard title="Build Lab" message="That champion link is invalid." />;
   }
 
   const { state } = normalizeBuildLabState(rawSearchParams);
@@ -61,7 +61,7 @@ export default async function ChampionBuildLabPage({
   ]);
   const champion = championStatic.champions[String(championId)];
   if (!champion) {
-    return <BackendErrorCard title="Build Lab" message="That champion is not available." />;
+    return <BackendErrorCard title="Build Lab" message="This champion isn’t available in Build Lab." />;
   }
 
   const result = await fetchBackendJson<BuildLabResponse>(
@@ -89,7 +89,7 @@ export default async function ChampionBuildLabPage({
     },
     selectedPath: [],
     stages: [],
-    unavailableReason: result.ok ? null : "Build Lab is temporarily unavailable."
+    unavailableReason: result.ok ? null : "Couldn't load Build Lab. Try again shortly."
   };
   const champions = Object.entries(championStatic.champions)
     .map(([id, entry]) => ({

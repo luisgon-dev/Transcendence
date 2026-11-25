@@ -26,7 +26,7 @@ import { fetchChampionMap, profileIconUrl } from "@/lib/staticData";
 
 const title = "League of Legends Leaderboards";
 const description = "Browse tracked ranked players by region, queue, champion, and role.";
-const image = socialImageUrl(title, "Regional rankings", "Ranked ladders and champion specialists");
+const image = socialImageUrl(title, "Regional rankings", "Solo/Duo and Flex rankings");
 
 export const metadata: Metadata = {
   title,
@@ -80,7 +80,7 @@ async function LeaderboardResults({ filters, version, champions }: {
   const activeChampion = filters.championId ? champions[String(filters.championId)] : null;
   const boardLabel = activeChampion
     ? `${activeChampion.name}${filters.role ? ` · ${roleDisplayLabel(filters.role)}` : ""}`
-    : filters.queue === "flex" ? "Regional Flex Ladder" : "Regional Solo/Duo Ladder";
+    : filters.queue === "flex" ? "Regional Flex ladder" : "Regional Solo/Duo ladder";
 
   if (!response.ok || !response.body) {
     return (
@@ -110,9 +110,9 @@ async function LeaderboardResults({ filters, version, champions }: {
       <Card className="overflow-hidden p-0">
         {board.entries.length === 0 ? (
           <div className="grid place-items-center gap-2 px-6 py-16 text-center">
-            <p className="type-section">No qualifying players yet</p>
+            <p className="type-section">No ranked players match these filters</p>
             <p className="type-ui max-w-lg text-muted">
-              This board fills as ranked matches are ingested. Try a broader champion role or another region.
+              Try all roles for this champion or choose another region.
             </p>
           </div>
         ) : (

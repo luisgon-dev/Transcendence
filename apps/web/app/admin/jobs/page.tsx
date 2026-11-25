@@ -120,13 +120,13 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
   const bulkDeleteLimit = Math.min(Math.max(jobs.totalMatched, 1), bulkDeleteMaxLimit);
 
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <section className="page-panel p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">Recurring Producers</h2>
+            <h2 className="text-lg font-semibold">Recurring jobs</h2>
             <p className="mt-1 text-sm text-muted">
-              Pause producers before clearing a large backlog so the queue stops refilling.
+              Pause the recurring jobs that add work to the queue before clearing a large backlog.
             </p>
           </div>
           <AdminRefreshButton label="Refresh Jobs" />
@@ -137,7 +137,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
       <section className="page-panel p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">Backlog Explorer</h2>
+            <h2 className="text-lg font-semibold">Job backlog</h2>
             <p className="mt-1 text-sm text-muted">
               {jobs.totalMatched.toLocaleString()} matching jobs
               {jobs.truncated ? ` · scan truncated at ${jobs.scanLimit.toLocaleString()}` : ""}
@@ -195,7 +195,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
             />
           </label>
           <label className="grid gap-1">
-            <span className="text-muted">Older Than Min</span>
+            <span className="text-muted">Older than (minutes)</span>
             <input
               type="number"
               name="olderThanMinutes"
@@ -222,7 +222,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
             />
           </label>
           <label className="grid gap-1">
-            <span className="text-muted">Scan Limit</span>
+            <span className="text-muted">Maximum jobs to scan</span>
             <input
               type="number"
               name="scanLimit"
@@ -242,9 +242,9 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
           <div className="mt-4 rounded-2xl border border-warning/20 bg-warning/10 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-medium text-warning">Bulk clear current filtered backlog</p>
+                <p className="text-sm font-medium text-warning">Delete matching jobs</p>
                 <p className="mt-1 text-xs text-warning">
-                  This targets the currently filtered {state} jobs only. Preview count: {jobs.totalMatched.toLocaleString()}.
+                  This targets the currently filtered {state} jobs only. Matching jobs: {jobs.totalMatched.toLocaleString()}.
                   {" "}Each run deletes up to {bulkDeleteLimit.toLocaleString()} jobs.
                 </p>
               </div>
@@ -265,7 +265,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
           </div>
         ) : (
           <div className="mt-4 rounded-2xl border border-danger/20 bg-danger/10 p-4 text-sm text-danger">
-            Processing jobs can only be deleted one-by-one from the table or detail page. That operation changes Hangfire state but may not stop already-started side effects immediately.
+            Processing jobs can only be deleted one-by-one from the table or detail page. A deleted job may still finish work it already started.
           </div>
         )}
 

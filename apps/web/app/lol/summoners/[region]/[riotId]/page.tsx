@@ -123,7 +123,7 @@ export default async function SummonerProfilePage({
     return (
       <BackendErrorCard
         title="Summoner"
-        message="This player link isn't valid. Search for the player by name from the home page instead."
+        message="This profile link is invalid. Search for the player by Riot ID."
         requestId={pageRequestId}
         detail={
           verbosity === "verbose"
@@ -265,7 +265,7 @@ async function SummonerProfileData({
     initialLookup = result.body;
   } else {
     initialError = {
-      message: "The player lookup returned an invalid response.",
+      message: "Couldn't open this player profile. Check the Riot ID and try again.",
       code: "INVALID_RESPONSE",
       requestId: result.requestId
     };

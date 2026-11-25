@@ -115,7 +115,7 @@ export async function createProSummonerAction(formData: FormData) {
   const tagLine = String(formData.get("tagLine") ?? "").trim();
   const platformRegion = String(formData.get("platformRegion") ?? "").trim();
   if (!gameName || !tagLine || !platformRegion) {
-    return { error: "gameName, tagLine, and platformRegion are required." };
+    return { error: "Enter the Riot game name, tag, and region." };
   }
   const type = String(formData.get("type") ?? "pro");
   const body = {
@@ -132,7 +132,7 @@ export async function createProSummonerAction(formData: FormData) {
   try {
     await adminPost("/api/admin/pro-summoners", body);
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "Failed to create pro summoner." };
+    return { error: e instanceof Error ? e.message : "Couldn't add the tracked player." };
   }
   revalidatePath("/admin/pro-summoners");
   return { error: null };
@@ -161,7 +161,7 @@ export async function approveProCandidateAction(formData: FormData) {
       puuid: String(formData.get("puuid") ?? "").trim() || null
     });
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "Failed to approve candidate." };
+    return { error: e instanceof Error ? e.message : "Couldn't approve the candidate." };
   }
 
   revalidatePath("/admin/pro-summoners");
@@ -186,7 +186,7 @@ export async function bulkCreateProSummonersAction(
   formData: FormData
 ): Promise<BulkImportResult> {
   const file = formData.get("file") as File | null;
-  if (!file) return { created: 0, errors: ["No file provided."] };
+  if (!file) return { created: 0, errors: ["Choose a CSV file to import."] };
 
   const text = await file.text();
   const lines = text.split(/\r?\n/).filter((l) => l.trim());
@@ -210,7 +210,7 @@ export async function bulkCreateProSummonersAction(
     const tagLine = cols[colIndex("tagline")] ?? "";
     const platformRegion = cols[colIndex("platformregion")] ?? "";
     if (!gameName || !tagLine || !platformRegion) {
-      errors.push(`Row ${i + 1}: gameName, tagLine, and platformRegion are required.`);
+      errors.push(`Row ${i + 1}: Enter the Riot game name, tag, and region.`);
       continue;
     }
 

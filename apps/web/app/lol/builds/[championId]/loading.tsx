@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 export default function Loading() {
   return (
     <div className="grid min-w-0 gap-5">
+      <p className="sr-only" role="status">Loading Build Lab…</p>
       <header className="flex items-start justify-between gap-4 border-b border-border/60 pb-5">
         <div className="flex items-center gap-3 sm:gap-4">
           <Skeleton className="size-14 rounded-card sm:size-16" />

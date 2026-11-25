@@ -3,9 +3,9 @@ import type { Metadata } from "next";
 import { LiveScoutClient } from "@/components/LiveScoutClient";
 import { socialImageUrl } from "@/lib/seo";
 
-const title = "Live Game Scout";
+const title = "Live Game";
 const description =
-  "View ranks, recent form, champion pools, spells, and runes for an active League match.";
+  "Scout an active match by Riot ID. See both teams’ ranks, recent form, spells, and runes.";
 const image = socialImageUrl(title, "Live matchup", "Ranks, streaks, champion pools, spells, and runes");
 
 export const metadata: Metadata = {

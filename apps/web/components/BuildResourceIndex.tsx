@@ -143,7 +143,7 @@ export async function BuildResourceIndex({
         <Card className="p-6">
           <h2 className="type-section">{isItems ? "Item" : "Rune"} analytics are unavailable</h2>
           <p className="type-ui mt-2 text-muted">
-            The analytics service could not be reached. Try again after the next data refresh.
+            Couldn’t load stats for this region. Try another region or check back shortly.
           </p>
         </Card>
       ) : entries.length === 0 ? (
@@ -262,8 +262,8 @@ export async function BuildResourceIndex({
       )}
 
       <p className="type-caption max-w-3xl text-muted">
-        Win rates are observed in completed Ranked Solo/Duo games and still reflect champion strength,
-        build timing, and game length. Read them beside the sample.
+        Read these Ranked Solo/Duo win rates alongside the game count. Champion strength, build timing,
+        and game length can all affect the results.
       </p>
     </div>
   );

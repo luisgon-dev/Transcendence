@@ -80,8 +80,8 @@ export async function BuildResourceDetailPage({
     return (
       <BackendErrorCard
         title={`${kind === "items" ? "Item" : "Rune"} analytics`}
-        message="This analytics detail could not be loaded right now."
-        hint="The current patch may still be processing, or the analytics service may be temporarily unavailable."
+        message="Couldn't load these stats."
+        hint="Try another region or check back later."
         requestId={analytics.requestId}
       />
     );

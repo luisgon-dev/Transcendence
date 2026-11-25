@@ -73,17 +73,17 @@ export default async function AdminLogsPage(props: { searchParams: SearchParams 
   const rows = response.items;
 
   const emptyMessage = !response.source.available
-    ? "The selected service is not currently writing operational logs."
+    ? "No log source is available for this service."
     : rows.length === 0
-      ? "No log rows matched the current filters."
+      ? "No log entries match these filters."
       : null;
 
   return (
-    <section className="grid gap-6">
+    <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <div className="grid gap-3 md:grid-cols-4">
         {stat("Service", response.source.service)}
         {stat("Source", response.source.available ? "Available" : "Missing")}
-        {stat("Files Scanned", String(response.source.filesScanned))}
+        {stat("Files searched", String(response.source.filesScanned))}
         {stat(
           "Latest Event",
           response.source.latestTimestampUtc
@@ -95,9 +95,9 @@ export default async function AdminLogsPage(props: { searchParams: SearchParams 
       <div className="page-panel p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">Service Logs</h2>
+            <h2 className="text-lg font-semibold">Service logs</h2>
             <p className="mt-1 text-sm text-fg/70">
-              Inspect operational logs across the Web API and worker services.
+              Search logs from the Web API or the worker.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -123,7 +123,7 @@ export default async function AdminLogsPage(props: { searchParams: SearchParams 
           </div>
         </div>
 
-        <form method="get" className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <form method="get" className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6 [&>label]:min-w-0">
           <label className="grid gap-1 text-xs text-fg/70">
             Service
             <select
@@ -188,13 +188,13 @@ export default async function AdminLogsPage(props: { searchParams: SearchParams 
                 defaultValue={limit}
                 min={1}
                 max={500}
-                className="control-input h-11 w-full bg-surface/80 px-3 text-sm text-fg focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
+                className="control-input h-11 min-w-0 flex-1 bg-surface/80 px-3 text-sm text-fg focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
               />
               <button
                 type="submit"
-                className="h-11 rounded-control border border-primary/40 bg-primary/10 px-4 text-sm font-medium text-primary transition hover:bg-primary/20"
+                className="h-11 shrink-0 rounded-control border border-primary/40 bg-primary/10 px-4 text-sm font-medium text-primary transition hover:bg-primary/20"
               >
-                Apply
+                Apply filters
               </button>
             </div>
           </label>
@@ -207,7 +207,7 @@ export default async function AdminLogsPage(props: { searchParams: SearchParams 
             <h3 className="text-base font-semibold">Results</h3>
             <p className="text-sm text-fg/70">
               {rows.length} row{rows.length === 1 ? "" : "s"} loaded
-              {response.source.truncated ? " (truncated to current limit)" : ""}
+              {response.source.truncated ? " (showing up to the selected limit)" : ""}
             </p>
           </div>
         </div>

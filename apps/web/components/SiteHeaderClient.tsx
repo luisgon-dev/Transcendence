@@ -20,7 +20,7 @@ const NAV_LINKS: NavLink[] = [
   { href: "/lol/champions", label: "Champions" },
   { href: "/lol/builds", label: "Build Lab", mobileLabel: "Builds", requiresBuildLab: true },
   { href: "/lol/items", label: "Items" },
-  { href: "/lol/pro-builds", label: "Pro Solo Q", mobileLabel: "Pro" }
+  { href: "/lol/pro-builds", label: "Pro Solo Queue", mobileLabel: "Pro" }
 ];
 
 function navLinkClass(pathname: string | null, prefix: string): string {

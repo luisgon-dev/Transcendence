@@ -36,7 +36,7 @@ async function authenticate(
   const password = normalizeCredential(formData.get("password"));
 
   if (!email || !password) {
-    return { error: "Email and password are required." };
+    return { error: "Enter your email and password." };
   }
 
   const client = getTrnClient();
@@ -53,7 +53,7 @@ async function authenticate(
     response = result.response;
   } catch (caught: unknown) {
     logEvent("warn", "auth action backend request failed", { endpoint, error: caught });
-    return { error: `We couldn't reach ${actionLabel} right now. Try again.` };
+    return { error: `Couldn't complete ${actionLabel}. Try again.` };
   }
 
   if (!data) {
@@ -92,7 +92,7 @@ export async function requestPasswordResetAction(
   formData: FormData
 ): Promise<PasswordResetActionState> {
   const email = normalizeCredential(formData.get("email"));
-  if (!email) return { error: "Email is required.", message: null };
+  if (!email) return { error: "Enter your email address.", message: null };
 
   try {
     const { data, error, response } = await getTrnClient().POST("/api/auth/password-reset", {
@@ -126,7 +126,7 @@ export async function completePasswordResetAction(
   const newPassword = normalizeCredential(formData.get("password"));
   const confirmPassword = normalizeCredential(formData.get("confirmPassword"));
 
-  if (!token) return { error: "This reset link is missing its token.", message: null };
+  if (!token) return { error: "This reset link is incomplete. Request a new link.", message: null };
   if (newPassword.length < 12) {
     return { error: "Password must be at least 12 characters.", message: null };
   }
@@ -152,7 +152,7 @@ export async function completePasswordResetAction(
 
   return {
     error: null,
-    message: "Password updated. Existing sessions were signed out; you can now sign in with the new password."
+    message: "Password updated. You’re signed out on all devices. Sign in with your new password."
   };
 }
 

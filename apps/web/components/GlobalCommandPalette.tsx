@@ -62,13 +62,13 @@ const NAVIGATION_ITEMS: readonly NavigationItem[] = [
   },
   {
     label: "Champions",
-    detail: "Champion list",
+    detail: "Find a champion’s builds and matchups",
     href: "/lol/champions",
     keywords: "champion analytics"
   },
   {
     label: "Build Lab",
-    detail: "Adjusted item, rune, and spell decisions",
+    detail: "Compare items, runes, and spells",
     href: "/lol/builds",
     keywords: "items runes spells builds wpa lab",
     requiresBuildLab: true
@@ -87,19 +87,19 @@ const NAVIGATION_ITEMS: readonly NavigationItem[] = [
   },
   {
     label: "Live Game",
-    detail: "Current match lookup",
+    detail: "Scout both teams in an active match",
     href: "/lol/live",
     keywords: "spectator current match"
   },
   {
-    label: "Pro Solo Q",
-    detail: "Professional solo queue builds",
+    label: "Pro Solo Queue",
+    detail: "See what pros build in ranked",
     href: "/lol/pro-builds",
     keywords: "pros pro builds"
   },
   {
-    label: "Multi-Search",
-    detail: "Search several players",
+    label: "Lobby search",
+    detail: "Compare up to five players",
     href: "/lol/multi-search",
     keywords: "multi search scout team"
   }
@@ -516,7 +516,7 @@ export function GlobalCommandPalette({ buildLabEnabled = false, onReady }: { bui
             <Dialog.Title>Global search</Dialog.Title>
           </VisuallyHidden.Root>
           <Command
-            label="Global search input"
+            label="Search champions, players, or pages"
             shouldFilter={false}
             value={selectedValue}
             onValueChange={setSelectedValue}
@@ -528,7 +528,7 @@ export function GlobalCommandPalette({ buildLabEnabled = false, onReady }: { bui
                 value={query}
                 onValueChange={setQuery}
                 placeholder="Search champions, players, or pages"
-                aria-label="Global search input"
+                aria-label="Search champions, players, or pages"
                 className="h-11 min-w-0 flex-1 bg-transparent px-1 text-base text-fg outline-none placeholder:text-muted"
               />
               <Select

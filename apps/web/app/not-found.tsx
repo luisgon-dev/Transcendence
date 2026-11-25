@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 
 const suggestions = [
-  { href: "/lol/tierlist", label: "LoL Tier List" },
+  { href: "/lol/tierlist", label: "Tier list" },
   { href: "/lol/champions", label: "Champions" },
   { href: "/lol/pro-builds", label: "Pro Solo Queue" }
 ];
@@ -14,12 +14,11 @@ export default function NotFound() {
       <section className="page-hero w-full max-w-4xl p-6 sm:p-8">
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.72fr)]">
           <div>
-            <p className="type-kicker text-muted">Route Missing</p>
             <h1 className="type-panel-title mt-3">
-              This page isn&apos;t available here.
+              Page not found
             </h1>
             <p className="type-lead mt-4">
-              The route may have moved, the URL may be wrong, or the page may not be live on this deployment yet.
+              Check the link or pick a page below.
             </p>
 
             <div className="mt-6 flex flex-wrap gap-3">
@@ -40,10 +39,7 @@ export default function NotFound() {
 
           <Card className="grid gap-4 rounded-panel p-5">
             <div>
-              <p className="type-kicker text-muted">Try Instead</p>
-              <p className="type-ui mt-2 text-fg/74">
-                These routes are stable entry points when you need to get moving again quickly.
-              </p>
+              <p className="type-kicker text-muted">Popular pages</p>
             </div>
 
             <nav>

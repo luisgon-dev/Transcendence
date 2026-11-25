@@ -87,7 +87,7 @@ function PlatformTable({ stats }: { stats: DatasetStats }) {
       <div className="px-5 pt-5 sm:px-6 sm:pt-6">
         <SectionHeading id="platforms-heading">Matches by platform</SectionHeading>
         <p className="type-note mt-1 text-muted">
-          Where each stored match was played, largest first.
+          Regions ordered by the number of matches stored.
         </p>
       </div>
       <TableScroll className="mt-3">
@@ -139,14 +139,14 @@ function Pipeline({ platformCount }: { platformCount: number | null }) {
       <SectionHeading id="pipeline-heading">How the data is collected</SectionHeading>
       <ol className="grid gap-4">
         <li className="grid gap-1">
-          <span className="type-ui font-semibold text-fg">Crawl</span>
+          <span className="type-ui font-semibold text-fg">Check ranked ladders</span>
           <span className="type-note text-muted">
             Every two hours a worker reads the Challenger, Grandmaster, and Master solo queue
             ladders on {platforms}, skipping players whose rank has not moved.
           </span>
         </li>
         <li className="grid gap-1">
-          <span className="type-ui font-semibold text-fg">Ingest</span>
+          <span className="type-ui font-semibold text-fg">Collect matches</span>
           <span className="type-note text-muted">
             Every two minutes it pulls recent ranked games, starting with tracked pros and
             one-tricks, then favorited, Emerald+ and other active players, stalest first. A
@@ -155,18 +155,17 @@ function Pipeline({ platformCount }: { platformCount: number | null }) {
           </span>
         </li>
         <li className="grid gap-1">
-          <span className="type-ui font-semibold text-fg">Compute</span>
+          <span className="type-ui font-semibold text-fg">Calculate stats</span>
           <span className="type-note text-muted">
             Scheduled jobs turn those games into tier grades, builds, matchups, and item and rune
-            stats. Win rates are shrunk toward each role&apos;s baseline, so a champion with a
-            handful of games cannot top the list on luck.
+            stats. When a champion has fewer games, its tier grade stays closer to the role average.
           </span>
         </li>
         <li className="grid gap-1">
-          <span className="type-ui font-semibold text-fg">Serve</span>
+          <span className="type-ui font-semibold text-fg">Publish stats</span>
           <span className="type-note text-muted">
-            Pages read precomputed snapshots and caches, and viewing one never calls Riot.
-            Profile refreshes and new matches arrive through background jobs.
+            Pages show stats we’ve already collected and calculated. Opening a page doesn’t call Riot directly.
+            Profile refreshes and new matches arrive in the background.
           </span>
         </li>
       </ol>
@@ -230,8 +229,8 @@ export default async function AboutPage() {
         </>
       ) : (
         <EmptyState
-          title="Dataset figures are not available yet"
-          description="A worker job recounts them every five minutes. Check back shortly."
+          title="Match counts are unavailable"
+          description="Match counts update every five minutes. Check back shortly."
         />
       )}
 

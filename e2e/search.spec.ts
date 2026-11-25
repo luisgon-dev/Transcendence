@@ -4,7 +4,7 @@ test("the first search click loads the dialog, restores focus, and supports reop
   await page.goto("/", { waitUntil: "domcontentloaded" });
   const trigger = page.getByRole("button", { name: "Open search", exact: true });
   await trigger.click();
-  const input = page.getByRole("combobox", { name: "Global search input" });
+  const input = page.getByRole("combobox", { name: "Search champions, players, or pages" });
   await expect(input).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(input).toHaveCount(0);
@@ -21,5 +21,5 @@ test("the first keyboard shortcut opens search without a prior click", async ({ 
   // Focusing the hydrated launcher establishes the same interaction boundary as a keyboard user.
   await page.getByRole("button", { name: "Open search", exact: true }).focus();
   await page.keyboard.press("Control+k");
-  await expect(page.getByRole("combobox", { name: "Global search input" })).toBeFocused();
+  await expect(page.getByRole("combobox", { name: "Search champions, players, or pages" })).toBeFocused();
 });

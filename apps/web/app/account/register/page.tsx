@@ -21,49 +21,11 @@ export default function RegisterPage() {
   return (
     <div className="auth-shell">
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(22rem,0.82fr)] lg:items-stretch">
-        <div className="page-panel grid content-between gap-8 p-6 sm:p-8">
-          <div>
-            <p className="type-kicker text-muted">Saved Workflow</p>
-            <h1 className="type-panel-title mt-3 max-w-xl">
-              Set up a lightweight account and keep your research path intact.
-            </h1>
-            <p className="type-lead mt-4 max-w-2xl">
-              Create an account to save favorite players, keep route shortcuts nearby, and return to the same working set faster.
-            </p>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-            <div className="surface-subtle rounded-card p-4">
-              <p className="type-kicker text-muted">Quick return</p>
-              <p className="type-ui mt-2 text-fg/84">Your saved pages stay close when you are bouncing between games, patch notes, and profiles.</p>
-            </div>
-            <div className="surface-subtle rounded-card p-4">
-              <p className="type-kicker text-muted">Private scope</p>
-              <p className="type-ui mt-2 text-fg/84">Email remains available; Riot Sign On is optional and never shares your Riot password.</p>
-            </div>
-            <div className="surface-subtle rounded-card p-4">
-              <p className="type-kicker text-muted">Built for reuse</p>
-              <p className="type-ui mt-2 text-fg/84">Useful when the same players, champions, and routes come up repeatedly during ranked sessions.</p>
-            </div>
-          </div>
-
-          <div className="surface-subtle rounded-panel p-4">
-            <p className="type-kicker text-primary">Security baseline</p>
-            <p className="field-note mt-2">
-              Use a password with at least 12 characters. Longer passphrases are easier to remember and harder to guess.
-            </p>
-          </div>
-        </div>
-
-        <Card className="auth-card w-full rounded-panel p-6 sm:p-7">
+        <Card className="auth-card w-full rounded-panel lg:col-start-2 lg:row-start-1 p-6 sm:p-7">
           <div className="relative z-[1]">
-            <p className="type-kicker text-muted">Account</p>
-            <h2 className="type-title mt-3">
+            <h1 className="type-title">
               Create account
-            </h2>
-            <p className="type-ui mt-3 text-fg/75">
-              Create an account to save favorite players and get back to them faster.
-            </p>
+            </h1>
 
             <form action={formAction} className="mt-6 grid gap-4">
               <label className="grid gap-1.5">
@@ -83,7 +45,7 @@ export default function RegisterPage() {
                   autoComplete="new-password"
                   required
                   minLength={12}
-                  placeholder="At least 12 characters"
+                  placeholder="Create a password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                 />
@@ -134,6 +96,39 @@ export default function RegisterPage() {
             </p>
           </div>
         </Card>
+
+        <div className="page-panel grid content-between lg:col-start-1 lg:row-start-1 gap-8 p-6 sm:p-8">
+          <div>
+            <h2 className="type-panel-title max-w-xl">
+              Save your favorite League players
+            </h2>
+            <p className="type-lead mt-4 max-w-2xl">
+              Add teammates, friends, or players you follow to Favorites.
+            </p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
+            <div className="surface-subtle rounded-card p-4">
+              <p className="type-kicker text-muted">Player profiles</p>
+              <p className="type-ui mt-2 text-fg/84">Open saved profiles from the account menu.</p>
+            </div>
+            <div className="surface-subtle rounded-card p-4">
+              <p className="type-kicker text-muted">Riot sign-in</p>
+              <p className="type-ui mt-2 text-fg/84">You can also sign in with Riot without sharing your Riot password with Transcendence.</p>
+            </div>
+            <div className="surface-subtle rounded-card p-4">
+              <p className="type-kicker text-muted">Live games</p>
+              <p className="type-ui mt-2 text-fg/84">Favorites shows the latest live game check for each saved player.</p>
+            </div>
+          </div>
+
+          <div className="surface-subtle rounded-panel p-4">
+            <p className="type-kicker text-primary">Password tip</p>
+            <p className="field-note mt-2">
+              A phrase made of several words can make a strong password easier to remember.
+            </p>
+          </div>
+        </div>
       </section>
     </div>
   );

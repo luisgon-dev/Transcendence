@@ -124,7 +124,7 @@ export function useSummonerRefreshPolling({
       setRefreshRevision((value) => value + 1);
       return;
     }
-    throw new Error("The operation finished, but its stored profile could not be loaded.");
+    throw new Error("The refresh finished, but the updated profile couldn't load. Reload the page to try again.");
   }, [gameName, region, tagLine]);
 
   useEffect(() => {
@@ -160,26 +160,35 @@ export function useSummonerRefreshPolling({
       }
       const operation = acceptedOperation(json);
       setBusy(false);
-      setAccepted({ message: "Refresh queued. Waiting for the profile and recent imports to finish." });
+      setAccepted({ message: "Refresh queued. We’ll update the profile and fetch recent matches." });
       const completed = await pollOperation(operation, "user", controller.signal, (progress) => {
-        const phase = progress.phases.find((entry) => entry.status === "running" || entry.status === "retrying");
-        setAccepted({ message: phase ? `Refresh ${progress.status}: ${phase.name}.` : `Refresh ${progress.status}.` });
+        if (progress.status === "retrying") {
+          setAccepted({ message: "Trying the profile refresh again…" });
+        } else if (progress.status === "running") {
+          setAccepted({ message: "Refreshing the profile and fetching recent matches…" });
+        }
       }, "summoner_refresh", { region, gameName, tagLine });
       if (completed.status === "failed") throw new Error(operationFailure(completed));
       if (completed.status === "succeeded" &&
           (!Number.isFinite(Date.parse(completed.result.profileUpdatedAtUtc ?? "")) ||
            !Number.isFinite(Date.parse(completed.result.recentImportCompletedAtUtc ?? "")))) {
-        throw new Error("The refresh finished without profile and recent-import completion evidence.");
+        throw new Error("Couldn't confirm the profile and recent matches were updated.");
       }
       await fetchProfileOnce(controller.signal);
       const missingMatches = (completed.result.deferredMatchCount ?? 0) + (completed.result.failedMatchCount ?? 0);
-      const recentMessage = completed.status === "partial"
-        ? missingMatches > 0
-          ? "Recent refresh finished with incomplete imports. Some matches may still be missing."
-          : "Recent refresh finished with warnings. Some requested data could not be updated."
-        : `Profile and recent-match refresh complete.${completed.result.warningCodes?.length ? ` Optional enrichment warnings: ${completed.result.warningCodes.join(", ")}.` : ""}`;
+      const warnings = completed.result.warningCodes ?? [];
+      let recentMessage = "Profile and recent matches updated.";
+      if (completed.status === "partial") {
+        recentMessage = missingMatches > 0
+          ? "The refresh finished. Some recent matches are still missing."
+          : "The refresh finished. Some profile data couldn't be updated.";
+      } else if (warnings.some((code) => code.toLowerCase() === "mastery_unavailable")) {
+        recentMessage += " Champion mastery couldn't be updated.";
+      } else if (warnings.length > 0) {
+        recentMessage += " Some extra profile data couldn't be updated.";
+      }
       const child = completed.phases.find((phase) => phase.name === "fullHistory" && phase.operationId);
-      setAccepted({ message: child ? `${recentMessage} Full history is importing separately.` : recentMessage });
+      setAccepted({ message: child ? `${recentMessage} Older matches are still importing.` : recentMessage });
       if (child?.operationId) {
         try {
           const history = await pollOperation({
@@ -188,14 +197,15 @@ export function useSummonerRefreshPolling({
             retryAfterSeconds: completed.retryAfterSeconds
           }, "user", controller.signal, undefined, "full_history", { region, gameName, tagLine });
           if (history.status === "failed") {
-            setAccepted({ message: `${recentMessage} Full-history import failed${history.errorCode ? ` (${history.errorCode})` : ""}.` });
+            setAccepted({ message: `${recentMessage} Older matches couldn’t be fully imported.` });
           } else {
             await fetchProfileOnce(controller.signal);
-            setAccepted({ message: `${recentMessage} Full-history import ${history.status === "partial" ? "finished with missing matches" : "complete"}.` });
+            setAccepted({ message: `${recentMessage} ${history.status === "partial" ? "Some older matches are still missing." : "Older matches imported."}` });
           }
         } catch (childError) {
           if (controller.signal.aborted) return;
-          setAccepted({ message: `${recentMessage} Full-history completion has not been verified: ${childError instanceof Error ? childError.message : "check again later"}` });
+          const detail = childError instanceof Error ? childError.message : "Check again shortly.";
+          setAccepted({ message: `${recentMessage} We couldn’t confirm whether older matches finished importing. ${detail}` });
         }
       }
     } catch (errorValue) {
@@ -345,7 +355,7 @@ export function useMatchHistory({
         if (!res.ok) {
           if (!cancelled) {
             setHistoryError(
-              json && "message" in json ? json.message ?? "Failed to load matches." : "Failed to load matches."
+              json && "message" in json ? json.message ?? "Couldn't load matches. Try again." : "Couldn't load matches. Try again."
             );
           }
           return;
@@ -353,7 +363,7 @@ export function useMatchHistory({
         if (!cancelled) setHistory(json as PagedResultDto<MatchSummary>);
       } catch (errorValue) {
         if (!cancelled) {
-          setHistoryError(errorValue instanceof Error ? errorValue.message : "Failed to load matches.");
+          setHistoryError(errorValue instanceof Error ? errorValue.message : "Couldn't load matches. Try again.");
         }
       } finally {
         if (!cancelled) setHistoryBusy(false);

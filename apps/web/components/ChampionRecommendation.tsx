@@ -126,7 +126,7 @@ export function ChampionRecommendation({
       <div className="flex flex-col gap-3 border-b border-border/45 px-4 py-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="type-kicker text-primary">Recommended setup</p>
-          <h2 className="type-section mt-1">Best supported choices</h2>
+          <h2 className="type-section mt-1">Choices backed by the most evidence</h2>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <Chip>All tracked ranks</Chip>
             {patches.length > 0 ? (
@@ -135,9 +135,9 @@ export function ChampionRecommendation({
             <Chip>Any lane opponent</Chip>
           </div>
           <p className="mt-2 text-xs text-muted">
-            Win rates adjusted for the gold lead each choice was made with.
+            Win rates account for the gold lead when each choice was made.
             {rankFiltered
-              ? ` Counted across all tracked ranks — the ${rankTierDisplayLabel(pageRankTier)} filter above does not change it.`
+              ? ` This setup uses games across all tracked ranks. The ${rankTierDisplayLabel(pageRankTier)} filter applies to the champion stats above.`
               : ""}
           </p>
         </div>

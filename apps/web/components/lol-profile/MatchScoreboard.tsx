@@ -115,7 +115,7 @@ function MatchTakeaways({ takeaways }: { takeaways: Takeaway[] }) {
   if (takeaways.length === 0) return null;
   return (
     <div className="surface-subtle grid gap-1.5 rounded-control px-3 py-2.5">
-      <p className="type-overline text-muted">Takeaways</p>
+      <p className="type-overline text-muted">Match highlights</p>
       <ul className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
         {takeaways.map((takeaway, idx) => (
           <li key={idx} className="flex items-start gap-1.5">
@@ -137,7 +137,7 @@ function TeamObjectivesSummary({ team, side }: { team: MatchTeamObjectives | und
         team.riftHerald.kills > 0 ? obj(team.riftHerald.kills, "Herald") : null,
         team.horde.kills > 0 ? obj(team.horde.kills, "Grub") : null,
         obj(team.tower.kills, "Tower"),
-        team.inhibitor.kills > 0 ? obj(team.inhibitor.kills, "Inhib") : null
+        team.inhibitor.kills > 0 ? obj(team.inhibitor.kills, "Inhibitor") : null
       ].filter(Boolean)
     : [];
 
@@ -147,7 +147,7 @@ function TeamObjectivesSummary({ team, side }: { team: MatchTeamObjectives | und
         {side === "blue" ? "Blue" : "Red"}
       </span>
       {team?.firstBlood ? (
-        <span className="surface-chip type-caption rounded-full px-2 py-0.5 text-fg/80">First Blood</span>
+        <span className="surface-chip type-caption rounded-full px-2 py-0.5 text-fg/80">First blood</span>
       ) : null}
       <span className="type-caption text-fg/72 tabular-nums">{items.length > 0 ? items.join(" · ") : "—"}</span>
     </div>

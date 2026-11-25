@@ -145,7 +145,7 @@ export default async function ProBuildsChampionPage({
   );
   const championId = Number(resolvedParams.championId);
   if (!Number.isFinite(championId) || championId <= 0) {
-    return <BackendErrorCard title="Pro Solo Q" message="That champion route is invalid." />;
+    return <BackendErrorCard title="Pro Solo Queue" message="That champion link is invalid." />;
   }
 
   const roleFilter = normalizeProBuildRole(resolvedSearchParams?.role);
@@ -181,7 +181,7 @@ export default async function ProBuildsChampionPage({
   if (!winratesRes.ok && !proBuildsRes.ok) {
     return (
       <BackendErrorCard
-        title="Pro Solo Q"
+        title="Pro Solo Queue"
         message={proFeedErrorMessage(proBuildsRes)}
         requestId={winratesRes.requestId || proBuildsRes.requestId}
         detail={
@@ -266,7 +266,7 @@ export default async function ProBuildsChampionPage({
           <div className="min-w-0 flex-1">
             <p className="type-caption text-muted">
               <Link href="/lol/pro-builds" className="rounded-sm transition-colors hover:text-fg">
-                Pro Solo Q
+                Pro Solo Queue
               </Link>
             </p>
             <h1 className="type-page-title text-fg">{championName}</h1>
@@ -328,7 +328,7 @@ export default async function ProBuildsChampionPage({
           <h2 className="type-section">No tracked games yet</h2>
           <p className="type-ui mt-2 text-muted">
             No tracked {SCOPE_NOUN[effectiveScope]} have played {championName}
-            {effectiveRole !== "ALL" ? ` ${roleDisplayLabel(effectiveRole).toLowerCase()}` : ""} in this scope.
+            {effectiveRole !== "ALL" ? ` ${roleDisplayLabel(effectiveRole).toLowerCase()}` : ""} with these filters.
             {includeOneTricks ? " Try another role or region." : " Include one-tricks or try another role."}
           </p>
         </section>
@@ -337,9 +337,9 @@ export default async function ProBuildsChampionPage({
           <section aria-labelledby="pro-build-heading" className="page-panel overflow-hidden">
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 py-4 sm:px-5">
               <h2 id="pro-build-heading" className="type-title text-fg">
-                What pros build
+                Common builds
               </h2>
-              <p className="type-caption text-muted">The most common choice in each slot</p>
+              <p className="type-caption text-muted">Most frequent item, rune, spell, and skill choices</p>
             </div>
             <div className="grid gap-px border-t border-border bg-border sm:grid-cols-2 xl:grid-cols-[1.4fr_1.2fr_1fr_1fr]">
               <BuildCell
@@ -349,7 +349,7 @@ export default async function ProBuildsChampionPage({
                 {coreBuild ? (
                   <ItemStrip itemIds={coreBuild.items} itemStatic={itemStatic} size={40} className="gap-1.5" />
                 ) : (
-                  <p className="type-ui text-muted">No repeat item path yet.</p>
+                  <p className="type-ui text-muted">No item path appears often enough yet.</p>
                 )}
               </BuildCell>
 
@@ -430,7 +430,7 @@ export default async function ProBuildsChampionPage({
             <aside className="grid gap-4">
               <section aria-labelledby="pro-players-heading" className="page-panel overflow-hidden">
                 <h2 id="pro-players-heading" className="type-section px-4 py-3.5 text-fg sm:px-5">
-                  Who plays it
+                  Players on this champion
                 </h2>
                 {topPlayers.length === 0 ? (
                   <p className="border-t border-border px-5 py-4 text-sm text-muted">No tracked players yet.</p>

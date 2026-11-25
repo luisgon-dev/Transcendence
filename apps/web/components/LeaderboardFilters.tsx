@@ -17,8 +17,8 @@ const ROLE_OPTIONS = [
   { value: "ALL", label: "All roles" },
   { value: "TOP", label: "Top" },
   { value: "JUNGLE", label: "Jungle" },
-  { value: "MIDDLE", label: "Middle" },
-  { value: "BOTTOM", label: "Bottom" },
+  { value: "MIDDLE", label: "Mid" },
+  { value: "BOTTOM", label: "Bot" },
   { value: "UTILITY", label: "Support" }
 ];
 

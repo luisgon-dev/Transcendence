@@ -20,7 +20,7 @@ export default function ForgotPasswordPage() {
         <p className="type-kicker text-muted">Account recovery</p>
         <h1 className="type-title mt-3">Reset your password</h1>
         <p className="type-ui mt-3 text-fg/75">
-          Enter the email on your account. For privacy, the result is the same whether or not an account exists.
+          Enter your account email. If it matches an account, we’ll send a reset link.
         </p>
 
         <form action={formAction} className="mt-6 grid gap-4">

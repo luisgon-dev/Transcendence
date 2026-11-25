@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 export default function Loading() {
   return (
     <div className="grid gap-8 md:gap-10">
+      <p className="sr-only" role="status">Loading page…</p>
       <section className="landing-hero">
         {/* Splash band on narrow screens, right-hand art on desktop. */}
         <Skeleton className="landing-hero-art rounded-none border-0" />

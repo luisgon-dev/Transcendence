@@ -62,7 +62,7 @@ const COLUMNS: {
   { label: "Win Rate", sortKey: "winRate", className: "px-2 text-right md:px-3" },
   // Strength = win-rate delta vs the role average — the value the tiers are cut on. Default order (rank) is
   // already strength-descending, so this column is display-only.
-  { label: "Strength", className: "hidden px-3 text-right md:table-cell" },
+  { label: "vs. role average", className: "hidden px-3 text-right md:table-cell" },
   { label: "Pick Rate", sortKey: "pickRate", className: "hidden px-3 text-right lg:table-cell" },
   { label: "Ban Rate", sortKey: "banRate", className: "hidden px-3 text-right lg:table-cell" },
   { label: "Games", sortKey: "games", className: "px-2 text-right md:px-3" },
@@ -513,9 +513,9 @@ export function TierListTable({
             onClick={() => applySort("contestedScore")}
             className="ml-1 h-8 px-3"
             aria-pressed={sortCol === "contestedScore"}
-            title="Sort by meta presence (pick + ban), separate from strength"
+            title="Sort by combined pick and ban rate"
           >
-            Most contested
+            Most picked or banned
           </Button>
           {isFilteredView ? (
             <Button variant="ghost" size="sm" onClick={resetView} className="h-8 px-3">
@@ -531,7 +531,7 @@ export function TierListTable({
             <>
               <p className="type-section text-fg">No champion matches “{deferredQuery.trim()}”.</p>
               <p className="type-ui text-muted">
-                Check the spelling, or clear the search to see the full board.
+                Check the spelling or clear your search.
               </p>
               <Button variant="outline" size="sm" onClick={() => setQuery("")} className="w-fit">
                 Clear search
@@ -539,9 +539,9 @@ export function TierListTable({
             </>
           ) : !includeLowSample && entries.length === 0 && lowSampleCount > 0 ? (
             <>
-              <p className="type-section text-fg">Every champion in this view is low-sample.</p>
+              <p className="type-section text-fg">Too few games to grade these champions confidently</p>
               <p className="type-ui text-muted">
-                Not enough games yet for a confident grade. Show them (capped at B) or pick a wider scope.
+                Show low-sample champions with grades capped at B, or widen your filters.
               </p>
               <Link href={lowSampleHref} prefetch={false} scroll={false}
                 className={buttonClassName({ variant: "outline", size: "sm", className: "w-fit" })}>
@@ -550,10 +550,10 @@ export function TierListTable({
             </>
           ) : (
             <>
-              <p className="type-section text-fg">No champions match this view.</p>
-              <p className="type-ui text-muted">Reset the board to bring every tier back into the table.</p>
+              <p className="type-section text-fg">No champions match these filters.</p>
+              <p className="type-ui text-muted">Reset the table to show all tiers.</p>
               <Button variant="outline" size="sm" onClick={resetView} className="w-fit">
-                Reset board view
+                Reset table
               </Button>
             </>
           )}

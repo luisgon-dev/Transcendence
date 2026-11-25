@@ -79,7 +79,7 @@ export default async function AdminLogsPage(props: { searchParams: SearchParams 
       : null;
 
   return (
-    <section className="grid gap-6">
+    <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <div className="grid gap-3 md:grid-cols-4">
         {stat("Service", response.source.service)}
         {stat("Source", response.source.available ? "Available" : "Missing")}
@@ -123,7 +123,7 @@ export default async function AdminLogsPage(props: { searchParams: SearchParams 
           </div>
         </div>
 
-        <form method="get" className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <form method="get" className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6 [&>label]:min-w-0">
           <label className="grid gap-1 text-xs text-fg/70">
             Service
             <select
@@ -188,11 +188,11 @@ export default async function AdminLogsPage(props: { searchParams: SearchParams 
                 defaultValue={limit}
                 min={1}
                 max={500}
-                className="control-input h-11 w-full bg-surface/80 px-3 text-sm text-fg focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
+                className="control-input h-11 min-w-0 flex-1 bg-surface/80 px-3 text-sm text-fg focus:border-primary/70 focus:ring-2 focus:ring-primary/25"
               />
               <button
                 type="submit"
-                className="h-11 rounded-control border border-primary/40 bg-primary/10 px-4 text-sm font-medium text-primary transition hover:bg-primary/20"
+                className="h-11 shrink-0 rounded-control border border-primary/40 bg-primary/10 px-4 text-sm font-medium text-primary transition hover:bg-primary/20"
               >
                 Apply filters
               </button>

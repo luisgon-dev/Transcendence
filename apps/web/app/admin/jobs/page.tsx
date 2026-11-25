@@ -120,7 +120,7 @@ export default async function AdminJobsPage(props: { searchParams: SearchParams 
   const bulkDeleteLimit = Math.min(Math.max(jobs.totalMatched, 1), bulkDeleteMaxLimit);
 
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <section className="page-panel p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>

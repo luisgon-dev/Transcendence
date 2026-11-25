@@ -9,7 +9,7 @@ export default async function AdminLayout({
   const session = await requireAdminSession();
 
   return (
-    <section className="grid gap-6">
+    <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <header className="page-hero ops-hero p-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>

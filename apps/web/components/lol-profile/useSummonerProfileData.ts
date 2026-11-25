@@ -202,9 +202,10 @@ export function useSummonerRefreshPolling({
             await fetchProfileOnce(controller.signal);
             setAccepted({ message: `${recentMessage} ${history.status === "partial" ? "Some older matches are still missing." : "Older matches imported."}` });
           }
-        } catch {
+        } catch (childError) {
           if (controller.signal.aborted) return;
-          setAccepted({ message: `${recentMessage} We couldn’t confirm whether older matches finished importing.` });
+          const detail = childError instanceof Error ? childError.message : "Check again shortly.";
+          setAccepted({ message: `${recentMessage} We couldn’t confirm whether older matches finished importing. ${detail}` });
         }
       }
     } catch (errorValue) {

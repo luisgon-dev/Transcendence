@@ -95,6 +95,9 @@ describe("request-correlated summoner refresh", () => {
     await act(async () => { await result.current.queueRefresh(); });
     expect(result.current.accepted?.message).toContain("Profile and recent matches updated");
     expect(result.current.accepted?.message).toContain(failure === "terminal" ? "Older matches couldn’t be fully imported" : "We couldn’t confirm whether older matches finished importing");
+    if (failure === "status-request") {
+      expect(result.current.accepted?.message).toContain("History status unavailable");
+    }
     expect(result.current.error).toBeNull();
     expect(result.current.profile?.summonerLevel).toBe(2);
     expect(result.current.refreshRevision).toBe(1);

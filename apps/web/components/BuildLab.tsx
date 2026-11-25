@@ -35,6 +35,7 @@ import {
   type BuildLabState,
 } from "@/lib/buildLab";
 import { cn } from "@/lib/cn";
+import { roleDisplayLabel } from "@/lib/roles";
 import {
   championIconUrl
 } from "@/lib/staticData";
@@ -43,7 +44,7 @@ type ChampionOption = { championId: number; slug: string; name: string };
 // Full labels from sm up; a phone splits the control three ways and the long ones would wrap.
 const MODE_LABELS: Record<BuildLabMode, { short: string; full: string }> = {
   supported: { short: "Supported", full: "Best supported" },
-  impact: { short: "Top lift", full: "Largest win-rate gain" },
+  impact: { short: "WR gain", full: "Largest win-rate gain" },
   common: { short: "Common", full: "Most common" }
 };
 
@@ -243,7 +244,7 @@ export function BuildLab({
               placeholder="Choose a role"
               options={BUILD_LAB_ROLES.map((role) => ({
                 value: role,
-                label: role === "UTILITY" ? "Support" : role[0] + role.slice(1).toLowerCase()
+                label: roleDisplayLabel(role)
               }))}
               onValueChange={(role) =>
                 updateState({

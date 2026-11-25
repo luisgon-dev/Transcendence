@@ -23,12 +23,12 @@ export function ResetPasswordForm({ token }: { token: string }) {
         <p className="type-kicker text-muted">Account recovery</p>
         <h1 className="type-title mt-3">Choose a new password</h1>
         <p className="type-ui mt-3 text-fg/75">
-          Use at least 12 characters. Completing this reset signs out every existing session.
+          Use at least 12 characters. Resetting your password signs you out on all devices.
         </p>
 
         {!token ? (
           <div className="mt-6 grid gap-3">
-            <p className="field-error type-ui">This reset link is incomplete.</p>
+            <p className="field-error type-ui">This reset link is missing information.</p>
             <Link href="/account/forgot-password" className="type-ui font-semibold text-primary hover:underline">
               Request a new reset link
             </Link>

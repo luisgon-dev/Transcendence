@@ -33,7 +33,7 @@ describe("request-correlated summoner refresh", () => {
     await act(async () => { resolveOperation(response(refreshStatus())); await pending; });
     expect(result.current.profile?.summonerLevel).toBe(2);
     expect(result.current.refreshRevision).toBe(1);
-    expect(result.current.accepted?.message).toContain("recent-match refresh complete");
+    expect(result.current.accepted?.message).toContain("Profile and recent matches updated");
   });
 
   it("reports partial imports and still reloads the persisted results", async () => {
@@ -42,7 +42,7 @@ describe("request-correlated summoner refresh", () => {
         ? response(refreshStatus({ status: "partial", result: { failedMatchCount: 1 } })) : response(initialLookup)));
     const { result } = renderHook(() => useSummonerRefreshPolling(props));
     await act(async () => { await result.current.queueRefresh(); });
-    expect(result.current.accepted?.message).toContain("incomplete imports");
+    expect(result.current.accepted?.message).toContain("recent matches are still missing");
     expect(result.current.refreshRevision).toBe(1);
   });
 
@@ -53,9 +53,9 @@ describe("request-correlated summoner refresh", () => {
           warningCodes: ["MASTERY_UNAVAILABLE"] } })) : response(initialLookup)));
     const { result } = renderHook(() => useSummonerRefreshPolling(props));
     await act(async () => { await result.current.queueRefresh(); });
-    expect(result.current.accepted?.message).toContain("recent-match refresh complete");
-    expect(result.current.accepted?.message).toContain("MASTERY_UNAVAILABLE");
-    expect(result.current.accepted?.message).not.toContain("incomplete imports");
+    expect(result.current.accepted?.message).toContain("Profile and recent matches updated");
+    expect(result.current.accepted?.message).toContain("Champion mastery couldn't be updated");
+    expect(result.current.accepted?.message).not.toContain("recent matches are still missing");
   });
 
   it("shows recent completion independently while the linked full-history child runs", async () => {
@@ -71,14 +71,14 @@ describe("request-correlated summoner refresh", () => {
     const { result } = renderHook(() => useSummonerRefreshPolling(props));
     let pending: Promise<void>;
     act(() => { pending = result.current.queueRefresh(); });
-    await waitFor(() => expect(result.current.accepted?.message).toContain("Full history is importing separately"));
+    await waitFor(() => expect(result.current.accepted?.message).toContain("Older matches are still importing"));
     expect(result.current.refreshRevision).toBe(1);
     await act(async () => {
       resolveChild(response(operationStatus({ operationId: childOperationId, kind: "full_history", result: {} })));
       await pending;
     });
     expect(result.current.refreshRevision).toBe(2);
-    expect(result.current.accepted?.message).toContain("Full-history import complete");
+    expect(result.current.accepted?.message).toContain("Older matches imported");
   });
 
   it.each(["terminal", "status-request"])("preserves recent success when child history fails (%s)", async (failure) => {
@@ -93,8 +93,8 @@ describe("request-correlated summoner refresh", () => {
     }));
     const { result } = renderHook(() => useSummonerRefreshPolling(props));
     await act(async () => { await result.current.queueRefresh(); });
-    expect(result.current.accepted?.message).toContain("recent-match refresh complete");
-    expect(result.current.accepted?.message).toContain(failure === "terminal" ? "Full-history import failed" : "Full-history completion has not been verified");
+    expect(result.current.accepted?.message).toContain("Profile and recent matches updated");
+    expect(result.current.accepted?.message).toContain(failure === "terminal" ? "Older matches couldn’t be fully imported" : "We couldn’t confirm whether older matches finished importing");
     expect(result.current.error).toBeNull();
     expect(result.current.profile?.summonerLevel).toBe(2);
     expect(result.current.refreshRevision).toBe(1);
@@ -115,7 +115,7 @@ describe("request-correlated summoner refresh", () => {
       ? response(accepted) : response(refreshStatus({ result: {} }))));
     const { result } = renderHook(() => useSummonerRefreshPolling(props));
     await act(async () => { await result.current.queueRefresh(); });
-    expect(result.current.error?.message).toContain("completion evidence");
+    expect(result.current.error?.message).toContain("confirm the profile and recent matches were updated");
     expect(result.current.profile).toEqual(profile);
     expect(result.current.refreshRevision).toBe(0);
   });

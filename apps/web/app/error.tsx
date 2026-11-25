@@ -11,8 +11,8 @@ export default function Error({
 }) {
   return (
     <RouteError
-      title="Something went wrong"
-      message="An unexpected error interrupted this page."
+      title="Page could not load"
+      message="We couldn't load this page."
       error={error}
       reset={reset}
     />

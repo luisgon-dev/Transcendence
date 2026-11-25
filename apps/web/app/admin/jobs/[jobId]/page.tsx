@@ -38,11 +38,11 @@ export default async function AdminJobDetailPage({
       <div className="page-panel p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">Job Detail</h2>
+            <h2 className="text-lg font-semibold">Job details</h2>
             <p className="mt-1 font-mono text-xs text-fg/70">{detail.jobId}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <AdminRefreshButton label="Refresh Detail" />
+            <AdminRefreshButton label="Refresh job details" />
             <Link
               href="/admin/jobs"
               className="surface-chip rounded-full px-3 py-1 text-xs text-fg/85 transition hover:bg-surface-2/72"
@@ -53,7 +53,7 @@ export default async function AdminJobDetailPage({
               href={buildLogsHref(detail)}
               className="surface-chip rounded-full px-3 py-1 text-xs text-fg/85 transition hover:bg-surface-2/72"
             >
-              Nearby Logs
+              Logs around this job
             </Link>
           </div>
         </div>
@@ -103,7 +103,7 @@ export default async function AdminJobDetailPage({
 
       {detail.currentState === "Processing" ? (
         <div className="rounded-panel border border-danger/20 bg-danger/10 p-5 text-sm text-danger">
-          Deleting a processing job changes Hangfire state to deleted, but already-started side effects may still complete before the worker observes cancellation.
+          A running job may finish work it already started after you delete it.
         </div>
       ) : null}
 
@@ -112,7 +112,7 @@ export default async function AdminJobDetailPage({
         <p className="mt-2 text-sm text-fg/75">{detail.exceptionType ?? "-"}</p>
         <p className="mt-1 text-sm">{detail.exceptionMessage ?? "-"}</p>
         <pre className="surface-subtle mt-3 overflow-x-auto whitespace-pre-wrap rounded-card p-3 text-xs text-fg/85">
-          {detail.exceptionDetails ?? "No exception details captured."}
+          {detail.exceptionDetails ?? "The worker recorded no exception details."}
         </pre>
       </div>
 
@@ -141,7 +141,7 @@ export default async function AdminJobDetailPage({
       </div>
 
       <div className="page-panel p-5">
-        <h3 className="text-base font-semibold">Invocation Arguments</h3>
+        <h3 className="text-base font-semibold">Job arguments</h3>
         <pre className="surface-subtle mt-3 overflow-x-auto whitespace-pre-wrap rounded-card p-3 text-xs text-fg/85">
           {detail.arguments.length > 0 ? detail.arguments.join("\n") : "No arguments."}
         </pre>

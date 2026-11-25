@@ -328,19 +328,19 @@ export function AdminBulkDeleteButton({
 
               setStatus({
                 tone: result.failed > 0 ? "info" : "success",
-                text: `Bulk delete finished: deleted ${result.deleted} of ${result.matched} matched jobs${result.failed > 0 ? `, ${result.failed} failed` : ""}.`
+                text: `Deleted ${result.deleted} of ${result.matched} matched jobs${result.failed > 0 ? `, ${result.failed} failed` : ""}.`
               });
               router.refresh();
             } catch (error) {
               setStatus({
                 tone: "error",
-                text: error instanceof Error ? error.message : "Bulk delete failed."
+                text: error instanceof Error ? error.message : "Couldn't delete the matching jobs."
               });
             }
           });
         }}
       >
-        {pending ? "Clearing..." : `Clear Filtered ${request.state}`}
+        {pending ? "Deleting jobs…" : `Delete matching ${request.state} jobs`}
       </Button>
     </div>
   );
@@ -442,7 +442,7 @@ function JobRow({
       } catch (error) {
         onStatus({
           tone: "error",
-          text: error instanceof Error ? error.message : "Delete failed."
+          text: error instanceof Error ? error.message : "Couldn't delete the job."
         });
       }
     });
@@ -465,7 +465,7 @@ function JobRow({
       } catch (error) {
         onStatus({
           tone: "error",
-          text: error instanceof Error ? error.message : "Retry failed."
+          text: error instanceof Error ? error.message : "Couldn't queue the job again."
         });
       }
     });
@@ -485,7 +485,7 @@ function JobRow({
           href={`/admin/jobs/${encodeURIComponent(job.jobId)}`}
           className="surface-chip rounded-full px-3 py-1 text-xs text-fg/85 transition hover:bg-surface-2/72"
         >
-          Inspect
+          View job
         </Link>
       </td>
       <td className="py-2">
@@ -493,7 +493,7 @@ function JobRow({
           href={buildLogsHref(job)}
           className="surface-chip rounded-full px-3 py-1 text-xs text-fg/85 transition hover:bg-surface-2/72"
         >
-          Nearby Logs
+          Related logs
         </Link>
       </td>
       <td className="py-2">
@@ -554,7 +554,7 @@ export function AdminJobDetailActionBar({ detail }: { detail: AdminJobDetail }) 
       } catch (error) {
         setStatus({
           tone: "error",
-          text: error instanceof Error ? error.message : "Delete failed."
+          text: error instanceof Error ? error.message : "Couldn't delete the job."
         });
       }
     });
@@ -576,7 +576,7 @@ export function AdminJobDetailActionBar({ detail }: { detail: AdminJobDetail }) 
       } catch (error) {
         setStatus({
           tone: "error",
-          text: error instanceof Error ? error.message : "Retry failed."
+          text: error instanceof Error ? error.message : "Couldn't queue the job again."
         });
       }
     });

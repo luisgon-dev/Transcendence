@@ -105,28 +105,28 @@ export default async function AdminOverviewPage() {
       <section className="page-panel p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">Pipeline Controls</h2>
+            <h2 className="text-lg font-semibold">Pipeline controls</h2>
             <p className="mt-1 text-sm text-muted">
-              Snapshot generated at {new Date(overview.generatedAtUtc).toLocaleString()}.
+              Metrics as of {new Date(overview.generatedAtUtc).toLocaleString()}.
             </p>
           </div>
           <span className="ops-chip type-ui" data-tone="info">
-            Live snapshot
+            Latest reported metrics
           </span>
           <div className="flex flex-wrap gap-2">
-            <AdminRefreshButton label="Refresh Snapshot" />
+            <AdminRefreshButton label="Refresh metrics" />
             <Link
               href="/admin/jobs?state=enqueued"
               className="surface-chip rounded-full px-4 py-2 text-sm text-fg/85 transition hover:bg-surface-2/72"
             >
-              Inspect Backlog
+              View queued jobs
             </Link>
             <form action={invalidateAnalyticsCacheAction}>
               <button
                 type="submit"
                 className="rounded-full border border-primary/40 bg-primary/10 px-4 py-2 text-sm text-primary transition hover:bg-primary/20"
               >
-                Invalidate Analytics Cache
+                Clear analytics cache
               </button>
             </form>
           </div>
@@ -137,7 +137,7 @@ export default async function AdminOverviewPage() {
         <div className="page-panel p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold">Analysis Health</h2>
+              <h2 className="text-lg font-semibold">Analytics health</h2>
               <p className="mt-1 text-sm text-muted">
                 Active patch {metrics.activePatchVersion ?? "unknown"}
                 {metrics.activePatchReleasedAtUtc
@@ -156,7 +156,7 @@ export default async function AdminOverviewPage() {
           <div className="mt-4 grid gap-3 md:grid-cols-4">
             {stat("Summoners", metrics.summary.summoners)}
             {stat("Matches", metrics.summary.matches)}
-            {stat("Patch Success", metrics.summary.currentPatchSuccessfulMatches)}
+            {stat("Patch fetch success", metrics.summary.currentPatchSuccessfulMatches)}
             {stat("Timeline Coverage", `${Math.round(metrics.summary.timelineCoverageRatio * 100)}%`)}
           </div>
 
@@ -166,7 +166,7 @@ export default async function AdminOverviewPage() {
                 <tr>
                   <th className="py-2">Region</th>
                   <th className="py-2">Health</th>
-                  <th className="py-2">Patch Success</th>
+                  <th className="py-2">Patch fetch success</th>
                   <th className="py-2">Timeline</th>
                   <th className="py-2">Queued</th>
                   <th className="py-2">Latest Fetch</th>
@@ -216,9 +216,9 @@ export default async function AdminOverviewPage() {
         </div>
 
         <div className="page-panel p-5">
-          <h2 className="text-lg font-semibold">Top Backlog Groups</h2>
+          <h2 className="text-lg font-semibold">Largest job groups</h2>
           <p className="mt-1 text-sm text-muted">
-            Derived from the first {queues.scanLimit.toLocaleString()} jobs scanned.
+            Counts include the first {queues.scanLimit.toLocaleString()} jobs scanned.
           </p>
           <div className="mt-4 grid gap-3">
             {queues.topGroups.slice(0, 8).map((group) => (
@@ -281,7 +281,7 @@ export default async function AdminOverviewPage() {
         </div>
 
         <div className="page-panel p-5">
-          <h2 className="text-lg font-semibold">Queue Pressure</h2>
+          <h2 className="text-lg font-semibold">Queue lengths</h2>
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="text-muted">

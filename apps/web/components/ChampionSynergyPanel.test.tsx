@@ -41,6 +41,6 @@ describe("ChampionSynergyPanel", () => {
     expect(html).toContain("Lee Sin");
     expect(html).toContain("+6.5%");
     expect(html).toContain("region=KR&amp;patch=16.14&amp;role=JUNGLE");
-    expect(html).toContain("Ranked by confidence-adjusted lift");
+    expect(html).toContain("with less weight given to pairs with fewer games");
   });
 });

@@ -279,7 +279,7 @@ describe("BuildLab", () => {
 
     // Rendered once in the desktop list and once in the mobile single-stage view.
     expect(
-      screen.getAllByText("Matchup too thin at this step — showing all opponents").length
+      screen.getAllByText("Too few games for this matchup. Showing all opponents.").length
     ).toBeGreaterThan(0);
     await waitFor(() => expect(fetch).toHaveBeenCalled());
   });

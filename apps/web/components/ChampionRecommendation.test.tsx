@@ -94,13 +94,13 @@ describe("ChampionRecommendation", () => {
     renderRecommendation(summary(), "GOLD");
 
     expect(screen.getByText("All tracked ranks")).toBeTruthy();
-    expect(screen.getByText(/the Gold filter above does not change it/)).toBeTruthy();
+    expect(screen.getByText(/The Gold filter applies to the champion stats above/)).toBeTruthy();
   });
 
   it("says nothing about rank when the page is not filtered", () => {
     renderRecommendation(summary(), "ALL");
 
-    expect(screen.queryByText(/filter above/)).toBeNull();
+    expect(screen.queryByText(/filter applies to/)).toBeNull();
   });
 
   it("marks a missing choice instead of leaving the slot blank", () => {

@@ -43,7 +43,7 @@ type ChampionOption = { championId: number; slug: string; name: string };
 // Full labels from sm up; a phone splits the control three ways and the long ones would wrap.
 const MODE_LABELS: Record<BuildLabMode, { short: string; full: string }> = {
   supported: { short: "Supported", full: "Best supported" },
-  impact: { short: "Top lift", full: "Highest lift" },
+  impact: { short: "Top lift", full: "Largest win-rate gain" },
   common: { short: "Common", full: "Most common" }
 };
 
@@ -145,7 +145,7 @@ export function BuildLab({
       .then(async (result) => {
         if (!result.ok) {
           throw new Error(
-            (await problemDetail(result)) ?? "Build Lab could not recalculate this context."
+            (await problemDetail(result)) ?? "Couldn't update results for these filters."
           );
         }
         return (await result.json()) as BuildLabResponse;
@@ -155,7 +155,7 @@ export function BuildLab({
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
-        setRequestError(error instanceof Error ? error.message : "Build Lab could not be loaded.");
+        setRequestError(error instanceof Error ? error.message : "Couldn't load Build Lab. Try again shortly.");
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -208,7 +208,7 @@ export function BuildLab({
             </p>
             <h1 className="type-page-title mt-1 truncate">{championName}</h1>
             <p className="mt-1 hidden text-sm text-muted sm:block">
-              Every build choice, with its win rate adjusted for the gold lead it was made with.
+              Compare build choices at similar gold leads or deficits.
             </p>
           </div>
         </div>
@@ -221,7 +221,7 @@ export function BuildLab({
         </Link>
       </header>
 
-      <section aria-label="Build Lab context" className="grid gap-3 border-b border-border/50 pb-5">
+      <section aria-label="Build Lab filters" className="grid gap-3 border-b border-border/50 pb-5">
         <div className="grid grid-cols-2 gap-x-3 gap-y-3 lg:grid-cols-5">
           <label className="grid min-w-0 gap-1.5">
             <span className="type-kicker text-muted">Champion</span>
@@ -336,7 +336,7 @@ export function BuildLab({
       <section className="overflow-hidden rounded-card border border-border/60 bg-surface">
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-border/50 px-4 py-3">
           <span className="type-kicker text-fg/70" aria-live="polite">
-            {loading ? "Recalculating…" : buildLabRegionLabel(response.context.requestedRegion)}
+            {loading ? "Updating results…" : buildLabRegionLabel(response.context.requestedRegion)}
           </span>
           <span className="text-xs text-muted">
             {coverage.includedPatches.length === 0
@@ -405,7 +405,7 @@ export function BuildLab({
 
         {requestError ? (
           <EmptyState
-            title="Build Lab could not recalculate"
+            title="Couldn’t update Build Lab"
             description={requestError}
             className="m-4"
           />
@@ -414,7 +414,7 @@ export function BuildLab({
             title="Not enough games yet"
             description={
               response.unavailableReason ??
-              "No counted games match this champion and role yet."
+              "There aren’t any games for this champion and role yet."
             }
             action={
               hasBuildLabSelection(state) || state.opponentChampionId || state.region ? (
@@ -475,10 +475,9 @@ export function BuildLab({
       </section>
 
       <p className="max-w-3xl text-xs leading-5 text-muted">
-        Adjusted win rate compares each choice with the games where the same decision was made at the
-        same gold lead or deficit, so an item usually bought while ahead is not credited for the lead.
-        It is still an observed rate, not a guarantee: choices marked “Few games” have wide intervals.
-        Matchup and regional numbers lean on all games until they have enough of their own.
+        Adjusted win rate compares choices made at similar gold leads or deficits. Choices marked “Few games”
+        have a wider range of likely win rates. Matchup and region results draw on a wider pool of games
+        until they have enough of their own.
       </p>
     </div>
   );

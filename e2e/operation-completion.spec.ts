@@ -32,7 +32,7 @@ test.describe("request-correlated live-game completion", () => {
     });
     await page.goto(liveUrl, { waitUntil: "domcontentloaded" });
     await expect.poll(() => polls).toBeGreaterThan(0);
-    await expect(page.getByText("Stored snapshot: no active game. Current status has not been verified.")).toBeVisible();
+    await expect(page.getByText("The last saved check found no active game. It may be out of date.")).toBeVisible();
     await expect(page.getByText(/^Checked /)).toHaveCount(0);
     completed = true;
     await expect(page.getByText("Not currently in a game.")).toBeVisible();
@@ -46,7 +46,7 @@ test.describe("request-correlated live-game completion", () => {
     }) }));
     await page.goto(liveUrl, { waitUntil: "domcontentloaded" });
     await expect(page.getByText(/INVALID_UPSTREAM_RESPONSE/)).toBeVisible();
-    await expect(page.getByText("Stored snapshot: no active game. Current status has not been verified.")).toBeVisible();
+    await expect(page.getByText("The last saved check found no active game. It may be out of date.")).toBeVisible();
     await expect(page.getByText(/^Checked /)).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath("unverified-stored-observation.png"), fullPage: true });
   });
@@ -60,10 +60,10 @@ test.describe("request-correlated live-game completion", () => {
     const stamp = page.getByText(/^Checked /);
     await expect(stamp).toBeVisible();
     const before = await stamp.textContent();
-    await page.getByRole("button", { name: "Re-check" }).click();
+    await page.getByRole("button", { name: "Check again" }).click();
     await expect(page.getByText(/RETRIES_EXHAUSTED/)).toBeVisible();
     await expect(stamp).toHaveText(before ?? "");
-    await expect(page.getByText("Stored snapshot: no active game. Current status has not been verified.")).toBeVisible();
+    await expect(page.getByText("The last saved check found no active game. It may be out of date.")).toBeVisible();
   });
 
   test("rejects a completed operation for a different player", async ({ page }) => {
@@ -74,7 +74,7 @@ test.describe("request-correlated live-game completion", () => {
       }
     }) }));
     await page.goto(liveUrl, { waitUntil: "domcontentloaded" });
-    await expect(page.getByText("The operation status response is invalid.")).toBeVisible();
+    await expect(page.getByText("Couldn't confirm the request status. Try again.")).toBeVisible();
     await expect(page.getByText(/^Checked /)).toHaveCount(0);
   });
 });
@@ -120,17 +120,17 @@ test.describe("request-correlated profile completion", () => {
     await page.goto("/lol/summoners/na/faker-NA1?page=3&queue=family:RANKED_SOLO_DUO&sort=kda_desc&champion=103", { waitUntil: "domcontentloaded" });
     await expect(page.getByText(`Level ${stored.profile.summonerLevel}`, { exact: true })).toBeVisible();
     await expect.poll(() => historyRequests.length).toBe(1);
-    await page.getByRole("button", { name: "Update Now" }).click();
+    await page.getByRole("button", { name: "Refresh profile" }).click();
     await expect.poll(() => recentPolls).toBeGreaterThan(0);
     await expect(page.getByText(`Level ${stored.profile.summonerLevel}`, { exact: true })).toBeVisible();
     expect(profileReads).toBe(0);
     expect(historyRequests).toHaveLength(1);
     recentComplete = true;
-    await expect(page.getByText(/Full history is importing separately/)).toBeVisible();
+    await expect(page.getByText(/Older matches are still importing/)).toBeVisible();
     await expect(page.getByText(`Level ${stored.profile.summonerLevel + 1}`, { exact: true })).toBeVisible();
     await expect.poll(() => historyRequests.length).toBe(2);
     historyComplete = true;
-    await expect(page.getByText(/Full-history import complete/)).toBeVisible();
+    await expect(page.getByText(/Older matches imported/)).toBeVisible();
     await expect(page.getByText(`Level ${stored.profile.summonerLevel + 2}`, { exact: true })).toBeVisible();
     await expect.poll(() => historyRequests.length).toBe(3);
     for (const request of historyRequests) {
@@ -156,10 +156,10 @@ test.describe("request-correlated profile completion", () => {
     }) }));
     await page.goto("/lol/summoners/na/faker-NA1", { waitUntil: "domcontentloaded" });
     await expect(page.getByText(`Level ${stored.profile.summonerLevel}`, { exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "Update Now" }).click();
+    await page.getByRole("button", { name: "Refresh profile" }).click();
     await expect(page.getByText(/RETRIES_EXHAUSTED/)).toBeVisible();
     await expect(page.getByText(`Level ${stored.profile.summonerLevel}`, { exact: true })).toBeVisible();
-    await expect(page.getByText(/recent-match refresh complete/)).toHaveCount(0);
+    await expect(page.getByText(/Profile and recent matches updated/)).toHaveCount(0);
   });
 
   test("a failed full-history status request does not erase recent-refresh success", async ({ page }) => {
@@ -176,8 +176,8 @@ test.describe("request-correlated profile completion", () => {
       }) }));
     await page.goto("/lol/summoners/na/faker-NA1", { waitUntil: "domcontentloaded" });
     await expect(page.getByText(`Level ${stored.profile.summonerLevel}`, { exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "Update Now" }).click();
-    await expect(page.getByText(/recent-match refresh complete.*Full-history completion has not been verified/)).toBeVisible();
+    await page.getByRole("button", { name: "Refresh profile" }).click();
+    await expect(page.getByText(/Profile and recent matches updated.*We couldn’t confirm whether older matches finished importing/)).toBeVisible();
     await expect(page.getByText(/History status unavailable/)).toBeVisible();
     await expect(page.getByText(`Level ${stored.profile.summonerLevel}`, { exact: true })).toBeVisible();
   });

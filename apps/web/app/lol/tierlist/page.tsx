@@ -63,7 +63,7 @@ export async function generateMetadata({
   const patchLabel = patch ? ` Patch ${patch}` : "";
   const title = `League of Legends ${queue.label} ${queue.hasRoles ? `${roleLabel} ` : ""}Tier List${patchLabel}`;
   const description = `${rank} ${queue.label} champion rankings${queue.hasRoles ? ` for ${roleLabel.toLowerCase()}` : ""}, with win rates, pick rates, and sample confidence.`;
-  const image = socialImageUrl(title, "League tier list", `${rank}, trustworthy samples, and role-specific rankings`);
+  const image = socialImageUrl(title, "League tier list", `${rank}, win rates, pick rates, and sample size`);
 
   return {
     title,
@@ -135,7 +135,7 @@ export default async function TierListPage({
           res.errorKind === "timeout"
             ? "This page is taking too long to load."
             : res.errorKind === "unreachable"
-              ? "We couldn't load the tier list right now."
+              ? "The tier list is temporarily unavailable."
               : "We couldn't load the tier list."
         }
         requestId={res.requestId}
@@ -268,15 +268,15 @@ export default async function TierListPage({
           data-testid="tier-scope-confidence"
         >
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className="border-warning/40 bg-warning/20 text-fg">Scope confidence</Badge>
+            <Badge className="border-warning/40 bg-warning/20 text-fg">How reliable are these grades?</Badge>
             <span className="type-ui font-semibold text-fg">
-              {tierScopeConfidence === "INSUFFICIENT" ? "Insufficient data" : "Flat tier signal"}
+              {tierScopeConfidence === "INSUFFICIENT" ? "Insufficient data" : "All champions share a tier"}
             </span>
           </div>
           <p className="mt-1.5 type-ui text-fg/75">
             {tierScopeConfidence === "INSUFFICIENT"
-              ? "No champion has cleared this scope's adaptive confidence floor yet. Treat these grades as provisional or widen the rank and region filters."
-              : "This scope has enough games, but every champion currently resolves to the same tier. The data does not support a meaningful tier spread yet."}
+              ? "There aren’t enough games for reliable grades with these filters. Try a wider rank range or region."
+              : "There are enough games to grade these picks. Their results are close enough to put them in the same tier."}
           </p>
         </Card>
       ) : null}

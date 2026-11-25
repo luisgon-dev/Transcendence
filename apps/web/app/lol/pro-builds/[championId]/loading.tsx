@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 export default function Loading() {
   return (
     <div className="grid gap-4">
+      <p className="sr-only" role="status">Loading pro builds…</p>
       <header className="toolbar px-4 py-4 sm:px-5">
         <div className="flex items-center gap-4">
           <Skeleton className="size-14 rounded-card sm:size-16" />

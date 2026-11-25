@@ -7,10 +7,10 @@ const ERROR_MESSAGES: Record<string, string> = {
   cancelled: "Riot sign-in was cancelled.",
   "invalid-state": "That Riot sign-in session expired. Please try again.",
   "session-expired": "Your Transcendence session expired. Sign in again before linking Riot.",
-  "start-failed": "Riot sign-in could not be started.",
-  "login-400": "Riot returned an invalid sign-in response.",
+  "start-failed": "Couldn't start Riot sign-in. Try again.",
+  "login-400": "Couldn't verify Riot sign-in. Try again.",
   "login-401": "Riot could not verify that sign-in. Please try again.",
-  "login-503": "Riot sign-in is not configured right now."
+  "login-503": "Riot sign-in is unavailable."
 };
 
 export function RiotAuthNotice() {

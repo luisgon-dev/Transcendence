@@ -12,7 +12,7 @@ export default function Error({
   return (
     <RouteError
       title="League of Legends"
-      message="We couldn't render this League of Legends page."
+      message="We couldn't load this League of Legends page."
       error={error}
       reset={reset}
     />

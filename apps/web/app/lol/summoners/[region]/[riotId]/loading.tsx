@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 export default function Loading() {
   return (
     <div className="grid grid-cols-1 gap-8">
+      <p className="sr-only" role="status">Loading player profile…</p>
       {/* Hero (ProfileHeroCard): 72px icon + name + rank line + actions, then a recent-form row */}
       <div className="toolbar px-4 py-4 sm:px-5">
         <div className="flex flex-wrap items-center gap-x-5 gap-y-4">

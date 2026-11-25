@@ -23,7 +23,7 @@ const SECONDARY_LINKS = [
   { label: "Items", href: "/lol/items" },
   { label: "Runes", href: "/lol/runes" },
   { label: "Leaderboards", href: "/lol/leaderboards" },
-  { label: "Multi-Search", href: "/lol/multi-search" },
+  { label: "Lobby search", href: "/lol/multi-search" },
   { label: "Pro Solo Queue", href: "/lol/pro-builds" }
 ] as const;
 
@@ -61,7 +61,7 @@ export default async function HomePage({
       : href;
 
   return (
-    <div className="grid gap-10">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-10">
       <section className="page-hero p-6 sm:p-8 md:p-10">
         {/* Identity zone */}
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
@@ -72,7 +72,7 @@ export default async function HomePage({
         </div>
 
         <h1 className="type-display mt-4 max-w-3xl">
-          League tier lists, matchups, and builds.
+          League tier lists, matchups, and builds
         </h1>
 
         {/* Action zone */}
@@ -115,12 +115,12 @@ export default async function HomePage({
       </section>
       <AnalyticsPatchNotice selection={patchSelection} />
 
-      <section className="grid gap-5 lg:grid-cols-[1.6fr_1fr]">
-        <Card className="p-0">
+      <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+        <Card className="min-w-0 p-0">
           <div className="flex items-center justify-between border-b border-border/50 px-5 py-3.5">
             <div>
-              <h2 className="type-section">Top Champions · Platinum+</h2>
-              <p className="type-ui mt-1 text-muted">Best-performing picks for this patch</p>
+              <h2 className="type-section">Top champions · Platinum+</h2>
+              <p className="type-ui mt-1 text-muted">Tier list picks for the selected region</p>
             </div>
             <Link href={hrefWithRegion("/lol/tierlist")} className="type-ui font-semibold text-primary hover:underline">
               View full tier list
@@ -128,8 +128,8 @@ export default async function HomePage({
           </div>
           {topRows.length === 0 ? (
             <div className="px-4 py-4">
-              <p className="text-sm text-fg/75">Tier list data is unavailable right now.</p>
-              <p className="mt-1 text-xs text-muted">This usually means data for the current patch is still being processed. Try selecting a different region above or check back soon.</p>
+              <p className="text-sm text-fg/75">No tier list results to show</p>
+              <p className="mt-1 text-xs text-muted">Try another region or check back later.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -187,10 +187,10 @@ export default async function HomePage({
 
         <div className="grid content-start gap-5">
           <Card className="p-5">
-            <h2 className="type-section">Hot Right Now</h2>
+            <h2 className="type-section">Featured champions</h2>
             <div className="mt-4 grid gap-2">
               {trendingRows.length === 0 ? (
-                <p className="text-sm text-muted">No featured champions to show right now.</p>
+                <p className="text-sm text-muted">No featured champions for this region.</p>
               ) : (
                 trendingRows.map((entry, index) => {
                   const champ = champions[String(entry.championId)];
@@ -224,7 +224,7 @@ export default async function HomePage({
           </Card>
 
           <Card className="p-5">
-            <p className="type-kicker text-muted">Player Tools</p>
+            <p className="type-kicker text-muted">More League tools</p>
             <div className="mt-4 grid gap-3 border-t border-border/25 pt-4">
               <Link
                 href={hrefWithRegion("/lol/leaderboards")}
@@ -251,14 +251,14 @@ export default async function HomePage({
                 href={hrefWithRegion("/lol/items")}
                 className="type-ui inline-flex items-center justify-between gap-3 border-t border-border/20 pt-3 text-fg/84 transition hover:text-fg"
               >
-                <span>Item & rune atlas</span>
+                <span>Items and runes</span>
                 <span className="text-muted" aria-hidden="true">/</span>
               </Link>
               <Link
                 href={EXAMPLE_SUMMONER_HREF}
                 className="type-ui inline-flex items-center justify-between gap-3 border-t border-border/20 pt-3 text-fg/84 transition hover:text-fg"
               >
-                <span>Example Profile</span>
+                <span>Example player profile</span>
                 <span className="text-muted" aria-hidden="true">/</span>
               </Link>
             </div>

@@ -152,7 +152,7 @@ export function RecommendedBuild({
         </Button>
       </div>
       <p className="mt-1 text-xs text-muted">
-        The best common, well-sampled choice at each step; items follow on from each other.
+        Common choices backed by enough games at each step. Items are listed in purchase order.
       </p>
       <ol className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-[repeat(auto-fill,minmax(11rem,1fr))]">
         {pieces.map((piece) => (
@@ -262,7 +262,7 @@ export function StageList({
 }) {
   const [expanded, setExpanded] = useState(false);
   if (stage.options.length === 0) {
-    return <p className="px-4 py-8 text-sm text-muted">No choice here has enough games yet.</p>;
+    return <p className="px-4 py-8 text-sm text-muted">Too few games to compare choices at this step.</p>;
   }
   const terminal = isTerminalBuildLabFamily(stage.family);
   const referencePage = stage.options.reduce((best, option) =>
@@ -411,8 +411,8 @@ export function stageNote(stage: BuildLabStage, response: BuildLabResponse) {
     // Deeper steps are never split by matchup or region at all, so this reads true for both cases:
     // the narrow population is too thin here, whether or not it was counted.
     return response.context.opponentChampionId
-      ? "Matchup too thin at this step — showing all opponents"
-      : `${buildLabRegionLabel(response.context.requestedRegion)} too thin at this step — showing all regions`;
+      ? "Too few games for this matchup. Showing all opponents."
+      : `${buildLabRegionLabel(response.context.requestedRegion)} has too few games at this step. Showing all regions.`;
   }
   if (stage.scope === "MATCHUP") return "This matchup";
   if (stage.scope === "REGION") return buildLabRegionLabel(response.context.requestedRegion);

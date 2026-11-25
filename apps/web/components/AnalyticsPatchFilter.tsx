@@ -52,7 +52,7 @@ export function AnalyticsPatchFilter({
         className={cn(className ?? "control-select min-w-[148px]", isPending && "opacity-60")}
         aria-label="Patch"
       >
-        <option value="">{patches.some(option => option.state) ? "Latest published patch" : "Current Patch"}</option>
+        <option value="">{patches.some(option => option.state) ? "Latest patch with stats" : "Current patch"}</option>
         {normalizedActivePatch && !hasActivePatchOption ? (
           <option value={normalizedActivePatch}>Patch {normalizedActivePatch}</option>
         ) : null}

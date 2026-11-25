@@ -47,7 +47,7 @@ export function ProSummonersPanel({
           size="sm"
           onClick={() => setShowAddForm((v) => !v)}
         >
-          {showAddForm ? "Hide Form" : "Add Summoner"}
+          {showAddForm ? "Hide Form" : "Add tracked player"}
         </Button>
         <Button
           variant="outline"
@@ -64,7 +64,7 @@ export function ProSummonersPanel({
 
       <div className="page-panel p-4">
         <h2 className="text-lg font-semibold">
-          Tracked Pro Summoners ({rows.length})
+          Tracked players ({rows.length})
         </h2>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -95,11 +95,11 @@ function DiscoveryCandidates({ candidates }: { candidates: ProPlayerDiscoveryCan
       <div>
         <h2 className="text-lg font-semibold">Pro account candidates ({candidates.length})</h2>
         <p className="mt-1 text-sm text-muted">
-          Leaguepedia names are staged here. Confirm the current Riot ID before adding an account.
+          Confirm each candidate’s current Riot ID before adding the account.
         </p>
       </div>
       {candidates.length === 0 ? (
-        <p className="mt-4 text-sm text-muted">No candidates need review.</p>
+        <p className="mt-4 text-sm text-muted">No candidates to review.</p>
       ) : (
         <div className="mt-4 grid gap-3">
           {candidates.map((candidate) => (
@@ -152,7 +152,7 @@ function CandidateRow({ candidate }: { candidate: ProPlayerDiscoveryCandidate })
       >
         <input type="hidden" name="id" value={candidate.id} />
         <Input name="gameName" placeholder="Riot game name" required />
-        <Input name="tagLine" placeholder="Tag" required />
+        <Input name="tagLine" placeholder="Riot tag" required />
         <select
           name="platformRegion"
           required
@@ -193,7 +193,7 @@ function AddSummonerForm() {
 
   return (
     <div className="page-panel p-4">
-      <h3 className="mb-3 text-sm font-semibold">Add Pro Summoner</h3>
+      <h3 className="mb-3 text-sm font-semibold">Add tracked player</h3>
       <form ref={formRef} action={handleSubmit} className="space-y-3">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           <Input name="gameName" placeholder="Game Name *" required />
@@ -232,7 +232,7 @@ function AddSummonerForm() {
               value="otp"
               className="accent-primary"
             />
-            High Elo OTP
+            High-rank one-trick
           </label>
           <Button type="submit" size="sm" disabled={pending}>
             {pending ? "Adding..." : "Add"}

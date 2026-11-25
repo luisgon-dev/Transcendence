@@ -233,7 +233,7 @@ function TeamBlock({
         <h4 className="type-ui font-medium text-fg">{label}</h4>
         {teamAnalysis?.estimatedWinProbability != null ? (
           <span className="text-xs text-muted">
-            Win prob{" "}
+            Est. win chance{" "}
             <span
               className={cn(
                 "font-medium tabular-nums",
@@ -358,7 +358,7 @@ export function LiveGameCard({
       const probeJson: unknown = await probeRes.json().catch(() => null);
       if (!probeRes.ok) {
         const fields = probeJson as LiveGameErrorFields | null;
-        const msg = fields?.message ?? `Live game probe failed (${probeRes.status}).`;
+        const msg = fields?.message ?? `Couldn't check the live game. Try again.`;
         const rid = fields?.requestId ? ` Request ID: ${fields.requestId}` : "";
         setError(`${msg}${rid}`);
         return;
@@ -366,7 +366,7 @@ export function LiveGameCard({
 
       const completed = await pollOperation(acceptedOperation(probeJson), "app", controller.signal, undefined, "live_game_probe", { region, gameName, tagLine });
       if (completed.status === "failed") throw new Error(operationFailure(completed));
-      if (completed.status !== "succeeded") throw new Error("The probe finished only partially. Current live-game status has not been verified.");
+      if (completed.status !== "succeeded") throw new Error("The check finished without confirming a current game.");
       const observation = completed.result.liveGame;
       recordJourney("live_probe_succeeded");
       const observedAt = completed.result.observedAtUtc ? Date.parse(completed.result.observedAtUtc) : Number.NaN;
@@ -375,14 +375,14 @@ export function LiveGameCard({
         !completed.result.snapshotId || !observation ||
         !["offline", "in_game"].includes(observation.state ?? "") ||
         !Number.isFinite(observedAt) || snapshotTime !== observedAt
-      ) throw new Error("The probe finished without a verified stored observation. Stored data has been retained.");
+      ) throw new Error("Couldn't confirm the current game. Try checking again.");
       controller.signal.throwIfAborted();
       setData(observation);
       setCheckedAt(new Date(observedAt));
       verifiedObservation.current = true;
     } catch (e) {
       if (controller.signal.aborted) return;
-      setError(e instanceof Error ? e.message : "Live game error.");
+      setError(e instanceof Error ? e.message : "Couldn't check the live game.");
     } finally {
       if (requestRef.current === controller) {
         requestRef.current = null;
@@ -441,7 +441,7 @@ export function LiveGameCard({
         <div>
           <h3 className="type-section">Live Game</h3>
           <p className="type-ui mt-2 text-fg/75">
-            Automatically checks whether this player is in a game.
+            See whether this player is in a game.
           </p>
           {checkedAt ? (
             <p className="mt-1 text-xs tabular-nums text-muted">
@@ -451,12 +451,12 @@ export function LiveGameCard({
           ) : null}
           {data?.dataAgeSeconds != null ? (
             <p className="mt-1 text-xs tabular-nums text-muted">
-              Worker snapshot {Math.max(0, data.dataAgeSeconds).toLocaleString()} sec old
+              Saved result {Math.max(0, data.dataAgeSeconds).toLocaleString()} sec old
             </p>
           ) : null}
         </div>
         <Button variant="outline" onClick={() => void check()} disabled={busy}>
-          {busy ? "Checking…" : "Re-check"}
+          {busy ? "Checking…" : "Check again"}
         </Button>
       </div>
 
@@ -480,7 +480,7 @@ export function LiveGameCard({
                     <span className="absolute inline-flex size-2 animate-ping rounded-full bg-success/60 motion-reduce:hidden" />
                     <span className="relative inline-flex size-2 rounded-full bg-success" />
                   </span>
-                  {checkedAt && !error ? "Live" : "Stored game snapshot"}
+                  {checkedAt && !error ? "Live" : "Last saved game"}
                 </span>
                 {metaParts.map((part) => (
                   <span key={part} className="type-ui text-fg/80">
@@ -514,11 +514,11 @@ export function LiveGameCard({
             </div>
           ) : (
             <p className="type-ui mt-4 text-muted">
-              {checkedAt && !error ? "Not currently in a game." : "Stored snapshot: no active game. Current status has not been verified."}
+              {checkedAt && !error ? "Not currently in a game." : "The last saved check found no active game. It may be out of date."}
             </p>
           )
         ) : !error && !busy ? (
-          <p className="type-ui mt-4 text-muted">Waiting to check live game status.</p>
+          <p className="type-ui mt-4 text-muted">Waiting for the first live game check.</p>
         ) : null}
       </div>
     </Card>

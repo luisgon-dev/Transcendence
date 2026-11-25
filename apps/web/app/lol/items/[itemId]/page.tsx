@@ -9,8 +9,8 @@ export async function generateMetadata({ params }: { params: Promise<{ itemId: s
   const itemMap = await fetchItemMap().catch(() => null);
   const name = itemDisplayName(itemMap?.items[itemId]);
   return {
-    title: `${name} Stats and Best Champions`,
-    description: `${name} ranked pick rate, win rate, sample size, and champion-role usage.`
+    title: `${name} Stats and Champion Usage`,
+    description: `${name} pick rate, win rate, game count, and which champions build it in ranked.`
   };
 }
 

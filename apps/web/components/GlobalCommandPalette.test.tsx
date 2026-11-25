@@ -69,7 +69,7 @@ describe("GlobalCommandPalette", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "Global search" });
     expect(dialog.getAttribute("aria-modal")).toBe("true");
-    const input = screen.getByRole("combobox", { name: "Global search input" });
+    const input = screen.getByRole("combobox", { name: "Search champions, players, or pages" });
     await waitFor(() => expect(document.activeElement).toBe(input));
 
     await user.keyboard("{Escape}");
@@ -82,7 +82,7 @@ describe("GlobalCommandPalette", () => {
     render(<GlobalCommandPalette />);
     fireEvent.keyDown(window, { key: "k", metaKey: true });
 
-    const input = await screen.findByRole("combobox", { name: "Global search input" });
+    const input = await screen.findByRole("combobox", { name: "Search champions, players, or pages" });
     await user.type(input, "Kronic#NA1");
     expect(await screen.findByRole("option", { name: /Kronic#NA1/i })).toBeTruthy();
 
@@ -95,7 +95,7 @@ describe("GlobalCommandPalette", () => {
     render(<GlobalCommandPalette />);
     fireEvent.keyDown(window, { key: "k", metaKey: true });
 
-    const input = await screen.findByRole("combobox", { name: "Global search input" });
+    const input = await screen.findByRole("combobox", { name: "Search champions, players, or pages" });
     await user.type(input, "kaisa");
 
     const championLabel = await screen.findByText("Kai'Sa");
@@ -112,7 +112,7 @@ describe("GlobalCommandPalette", () => {
     render(<GlobalCommandPalette />);
     fireEvent.keyDown(window, { key: "k", metaKey: true });
 
-    const input = await screen.findByRole("combobox", { name: "Global search input" });
+    const input = await screen.findByRole("combobox", { name: "Search champions, players, or pages" });
     await user.type(input, "items");
     await screen.findByRole("option", { name: /Item usage and win rates/i });
     expect(screen.queryByRole("option", { name: /Build Lab/i })).toBeNull();
@@ -127,7 +127,7 @@ describe("GlobalCommandPalette", () => {
     render(<GlobalCommandPalette buildLabEnabled />);
     fireEvent.keyDown(window, { key: "k", metaKey: true });
 
-    const input = await screen.findByRole("combobox", { name: "Global search input" });
+    const input = await screen.findByRole("combobox", { name: "Search champions, players, or pages" });
     await user.type(input, "build");
     // The point of the entry: Build Lab sits beside the library rather than replacing it. Both match
     // "build" because each carries it in `keywords`.
@@ -151,11 +151,11 @@ describe("GlobalCommandPalette", () => {
     render(<GlobalCommandPalette />);
     fireEvent.keyDown(window, { key: "k", metaKey: true });
 
-    const input = await screen.findByRole("combobox", { name: "Global search input" });
+    const input = await screen.findByRole("combobox", { name: "Search champions, players, or pages" });
     await user.type(input, "multi search");
-    await screen.findByRole("option", { name: /Multi-Search/i });
+    await screen.findByRole("option", { name: /Lobby search/i });
     await waitFor(() =>
-      expect(screen.getByRole("option", { name: /Multi-Search/i }).getAttribute("data-selected")).toBe("true")
+      expect(screen.getByRole("option", { name: /Lobby search/i }).getAttribute("data-selected")).toBe("true")
     );
 
     await user.keyboard("{Enter}");

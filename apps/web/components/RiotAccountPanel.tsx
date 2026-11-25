@@ -47,7 +47,7 @@ export function RiotAccountPanel() {
   async function unlink() {
     const response = await fetch("/api/trn/user/users/me/riot-account", { method: "DELETE" });
     if (!response.ok) {
-      setMessage("This Riot identity is your only sign-in method and cannot be unlinked yet.");
+      setMessage("Riot is your only sign-in method. Keep it linked to access your account.");
       return;
     }
     setMessage("Riot account unlinked.");
@@ -58,7 +58,7 @@ export function RiotAccountPanel() {
     <Card className="p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-2xl">
-          <p className="type-kicker text-primary">Verified main</p>
+          <p className="type-kicker text-primary">Linked Riot ID</p>
           <h2 className="mt-2 type-section">Riot account</h2>
           {link ? (
             <div className="mt-3">
@@ -74,17 +74,17 @@ export function RiotAccountPanel() {
             </div>
           ) : link === null ? (
             <p className="mt-3 text-sm leading-6 text-fg/72">
-              Link Riot to establish your verified main and sign in without sharing your Riot password with Transcendence.
+              Link your Riot ID to sign in with Riot. Your Riot password stays with Riot.
             </p>
           ) : (
-            <p className="mt-3 text-sm text-muted">Checking Riot link…</p>
+            <p className="mt-3 text-sm text-muted">Checking linked Riot account…</p>
           )}
         </div>
 
         {link ? (
           link.canUnlink ? (
             <Button variant="outline" size="sm" onClick={() => void unlink()}>
-              Unlink
+              Unlink Riot account
             </Button>
           ) : (
             <span className="rounded-control border border-border px-3 py-2 text-xs text-muted">

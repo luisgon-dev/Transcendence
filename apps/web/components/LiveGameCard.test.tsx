@@ -41,7 +41,7 @@ describe("LiveGameCard", () => {
 
     expect(await screen.findByText("Not currently in a game.")).toBeTruthy();
     expect(screen.getByText(/^Checked /)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Re-check" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Check again" })).toBeTruthy();
   });
 
   it("refreshes detected games on the light one-minute cadence", async () => {
@@ -138,7 +138,7 @@ describe("LiveGameCard", () => {
     expect(screen.getByLabelText("Recent champion pool")).toBeTruthy();
     expect(await screen.findByAltText("Flash")).toBeTruthy();
     expect(await screen.findByAltText("Press the Attack")).toBeTruthy();
-    expect(screen.getByText("Worker snapshot 14 sec old")).toBeTruthy();
+    expect(screen.getByText("Saved result 14 sec old")).toBeTruthy();
   });
 
   it("keeps stored snapshots without claiming a successful check when the operation fails", async () => {
@@ -150,7 +150,7 @@ describe("LiveGameCard", () => {
     }));
     render(<LiveGameCard region="na" gameName="Kronic" tagLine="NA1" />);
     expect(await screen.findByText(/INVALID_UPSTREAM_RESPONSE/)).toBeTruthy();
-    expect(screen.getByText(/Current status has not been verified/)).toBeTruthy();
+    expect(screen.getByText(/The last saved check found no active game/)).toBeTruthy();
     expect(screen.queryByText(/^Checked /)).toBeNull();
   });
 
@@ -165,7 +165,7 @@ describe("LiveGameCard", () => {
       return jsonResponse(null);
     }));
     render(<LiveGameCard region="na" gameName="Kronic" tagLine="NA1" />);
-    expect(await screen.findByText(/without a verified stored observation/)).toBeTruthy();
+    expect(await screen.findByText(/Couldn't confirm the current game/)).toBeTruthy();
     expect(screen.queryByText(/^Checked /)).toBeNull();
   });
 
@@ -179,8 +179,8 @@ describe("LiveGameCard", () => {
     }));
     render(<LiveGameCard region="na" gameName="Kronic" tagLine="NA1" />);
     const previous = (await screen.findByText(/^Checked /)).textContent;
-    fireEvent.click(screen.getByRole("button", { name: "Re-check" }));
-    expect(await screen.findByText(/live game probe failed/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    expect(await screen.findByText(/Couldn't check the live game/)).toBeTruthy();
     expect(screen.getByText(/^Checked /).textContent).toBe(previous);
   });
 });

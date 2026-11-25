@@ -74,9 +74,9 @@ function formatHistoryCoverage(history: ProfileFullHistoryStatus | null | undefi
   const riotTotal = history.riotTotal;
   if (typeof riotTotal === "number") {
     const delta = history.rankedCountDelta ?? history.completedMatchCount - riotTotal;
-    if (delta === 0) return `Riot ranked total matched · ${formatGames(riotTotal)} games`;
+    if (delta === 0) return `Matches Riot’s ranked total · ${formatGames(riotTotal)} games`;
     const sign = delta > 0 ? "+" : "";
-    return `${formatGames(history.completedMatchCount)} stored / ${formatGames(riotTotal)} Riot · ${sign}${delta}`;
+    return `${formatGames(history.completedMatchCount)} tracked · Riot reports ${formatGames(riotTotal)} · ${sign}${delta} difference`;
   }
 
   const normalized = history.status.replaceAll("_", " ").toLowerCase();
@@ -154,7 +154,7 @@ export function PerformanceCard({
   return (
     <Card className="profile-section-card p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <h2 className="type-section text-fg">How you play</h2>
+        <h2 className="type-section text-fg">Ranked performance</h2>
         <p className="type-caption text-muted">{activeSeason?.displayName ?? "Active season"} · Solo/Duo</p>
       </div>
 
@@ -197,7 +197,7 @@ export function PerformanceCard({
             <Stat label="CS / min" value={formatStat(overviewStats.avgCsPerMin, 1)} />
             <Stat label="Vision" value={formatStat(overviewStats.avgVisionScore, 1)} />
             <Stat label="KDA" value={formatStat(overviewStats.kdaRatio, 2)} />
-            <Stat label="Dmg / game" value={formatCompactNumber(overviewStats.avgDamageToChamps)} />
+            <Stat label="Damage per game" value={formatCompactNumber(overviewStats.avgDamageToChamps)} />
           </div>
         </div>
       ) : null}

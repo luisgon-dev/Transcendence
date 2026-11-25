@@ -2,7 +2,8 @@ import { Card } from "@/components/ui/Card";
 
 export default function LeaderboardsLoading() {
   return (
-    <div className="grid gap-4" aria-label="Loading leaderboard">
+    <div className="grid gap-4">
+      <p className="sr-only" role="status">Loading leaderboard…</p>
       <div className="h-28 animate-pulse rounded-2xl border border-border/60 bg-surface" />
       <Card className="overflow-hidden p-0">
         <div className="grid divide-y divide-border/30">

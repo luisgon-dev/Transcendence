@@ -86,13 +86,13 @@ export function MultiSearchClient({ initialRegion = "na", initialRiotId = "", qu
       });
       const body = (await result.json().catch(() => null)) as MultiSearchResponse | null;
       if (!result.ok || !body) {
-        throw new Error(problemMessage(body) ?? "Team search is unavailable right now.");
+        throw new Error(problemMessage(body) ?? "Couldn't load lobby results. Try again.");
       }
       setResponse(body);
       recordJourney("multi_search_succeeded");
     } catch (caught) {
       setResponse(null);
-      setError(caught instanceof Error ? caught.message : "Team search is unavailable right now.");
+      setError(caught instanceof Error ? caught.message : "Couldn't load lobby results. Try again.");
     } finally {
       setBusy(false);
     }
@@ -104,17 +104,15 @@ export function MultiSearchClient({ initialRegion = "na", initialRiotId = "", qu
     <div className="grid gap-6">
       <header className="page-hero grid gap-5 p-5 md:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)] md:p-7">
         <div className="max-w-2xl">
-          <p className="type-kicker text-primary">Multi-search</p>
-          <h1 className="mt-3 type-page-title">Compare your lobby.</h1>
+          <h1 className="mt-3 type-page-title">Scout your lobby</h1>
           <p className="mt-3 max-w-[62ch] text-fg/72">
             Paste up to five Riot IDs to compare rank, main role, recent form, and champion pool.
           </p>
         </div>
         <div className="surface-subtle self-end rounded-card px-4 py-3">
-          <p className="type-kicker text-muted">Accepted input</p>
+          <p className="type-kicker text-muted">What to paste</p>
           <p className="mt-2 text-sm leading-6 text-fg/78">
-            One <span className="font-semibold text-fg">GameName#TAG</span> per line, comma-separated,
-            or copied lobby join messages.
+            Paste lobby join messages or enter <span className="font-semibold text-fg">GameName#TAG</span> IDs on separate lines or separated by commas.
           </p>
         </div>
       </header>
@@ -157,7 +155,7 @@ export function MultiSearchClient({ initialRegion = "na", initialRiotId = "", qu
               </Badge>
               {parsed.rejected.length > 0 ? (
                 <span className="text-sm text-warning">
-                  {parsed.rejected.length} line{parsed.rejected.length === 1 ? "" : "s"} need a #tag
+                  {parsed.rejected.length === 1 ? "1 line needs" : `${parsed.rejected.length} lines need`} a #tag
                 </span>
               ) : null}
               {parsed.truncated ? <span className="text-sm text-warning">Only the first five IDs will be searched.</span> : null}
@@ -177,9 +175,9 @@ export function MultiSearchClient({ initialRegion = "na", initialRiotId = "", qu
         </div>
       ) : (
         <div className="rounded-card border border-dashed border-border px-6 py-10 text-center">
-          <p className="type-section">Lobby comparison appears here</p>
+          <p className="type-section mx-auto">No players searched yet</p>
           <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-muted">
-            Results use stored profiles. Missing players are marked.
+            Ranks, roles, and recent form come from the profiles we have on file.
           </p>
         </div>
       )}
@@ -192,11 +190,10 @@ function TeamInsights({ response, foundCount }: { response: MultiSearchResponse;
   return (
     <section className="grid gap-3 lg:grid-cols-[0.75fr_1.25fr]" aria-labelledby="team-read-heading">
       <Card className="p-5">
-        <p className="type-kicker text-muted">Team read</p>
         <h2 id="team-read-heading" className={`mt-2 type-section ${rankTierColorClass(insights.averageRankLabel)}`}>
-          {rankTierDisplayLabel(insights.averageRankLabel)} average
+          {rankTierDisplayLabel(insights.averageRankLabel)} average rank
         </h2>
-        <p className="mt-2 text-sm text-muted">Based on {foundCount} of {response.results.length} stored profiles.</p>
+        <p className="mt-2 text-sm text-muted">Based on {foundCount} of {response.results.length} profiles found.</p>
         <div className="mt-4 flex flex-wrap gap-2">
           {insights.roleCoverage.map((role) => <Badge key={role}>{roleDisplayLabel(role)}</Badge>)}
           {insights.roleCoverage.length === 0 ? <Badge>No known main roles</Badge> : null}
@@ -205,8 +202,7 @@ function TeamInsights({ response, foundCount }: { response: MultiSearchResponse;
       <Card className="p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="type-kicker text-muted">Role pressure</p>
-            <h2 className="mt-2 type-section">Coverage and autofill signals</h2>
+            <h2 className="mt-2 type-section">Main roles and possible autofills</h2>
           </div>
           {insights.missingRoles.length > 0 ? (
             <Badge className="border-warning/35 text-warning">
@@ -225,7 +221,7 @@ function TeamInsights({ response, foundCount }: { response: MultiSearchResponse;
             ))}
           </ul>
         ) : (
-          <p className="mt-4 text-sm text-muted">No duplicate-main or missing-profile autofill signals in this lobby.</p>
+          <p className="mt-4 text-sm text-muted">No overlapping main roles in the profiles found.</p>
         )}
       </Card>
     </section>
@@ -246,8 +242,7 @@ function ResultsTable({
   return (
     <Card className="overflow-hidden p-0">
       <div className="border-b border-border/50 px-5 py-4">
-        <p className="type-kicker text-muted">Player comparison</p>
-        <h2 className="mt-1 type-section">Rank, role, form, and champion pool</h2>
+        <h2 className="mt-1 type-section">Lobby players</h2>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[920px] text-left text-sm">
@@ -256,7 +251,7 @@ function ResultsTable({
               <th className="px-5 py-3">Player</th>
               <th className="px-4 py-3">Solo rank</th>
               <th className="px-4 py-3">Main role</th>
-              <th className="px-4 py-3">Tracked form</th>
+              <th className="px-4 py-3">Recent form</th>
               <th className="px-4 py-3">Top champions</th>
             </tr>
           </thead>
@@ -291,7 +286,7 @@ function PlayerRow({ result, region, staticData, queue }: { queue?: string; resu
           )}
           <span>
             <span className="block font-semibold text-fg group-hover:text-primary">{result.gameName}#{result.tagLine}</span>
-            <span className="type-caption text-muted">{result.found ? `Level ${result.summonerLevel ?? "?"}` : "Not in stored data"}</span>
+            <span className="type-caption text-muted">{result.found ? `Level ${result.summonerLevel ?? "?"}` : "Profile not found"}</span>
           </span>
         </Link>
         <Link href={links.live} className="mt-2 inline-flex min-h-11 items-center text-xs font-semibold text-primary">Check live game</Link>
@@ -310,7 +305,7 @@ function PlayerRow({ result, region, staticData, queue }: { queue?: string; resu
               {result.overviewStats.kdaRatio.toFixed(2)} KDA, {result.overviewStats.totalMatches} games
             </span>
           </div>
-        ) : <span className="text-muted">No tracked form</span>}
+        ) : <span className="text-muted">No recent form on file</span>}
       </td>
       <td className="px-4 py-4">
         {(result.topChampions?.length ?? 0) > 0 ? (
@@ -328,7 +323,7 @@ function PlayerRow({ result, region, staticData, queue }: { queue?: string; resu
               );
             })}
           </div>
-        ) : <span className="text-muted">No champion sample</span>}
+        ) : <span className="text-muted">No recent champions on file</span>}
       </td>
     </tr>
   );

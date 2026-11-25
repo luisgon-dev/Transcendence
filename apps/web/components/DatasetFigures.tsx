@@ -38,7 +38,7 @@ export function DatasetFigures({ stats, className }: { stats: DatasetStats; clas
 
   if (stats.lastMatchIngestedAtUtc) {
     figures.push({
-      label: "Last ingest",
+      label: "Last match collected",
       value: (
         <UpdatedAgo timestamp={stats.lastMatchIngestedAtUtc} prefix="" className="text-fg" />
       )

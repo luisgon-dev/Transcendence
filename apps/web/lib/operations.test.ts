@@ -10,15 +10,15 @@ describe("operation completion polling", () => {
 
   it("constructs a scoped same-origin path and rejects injected URLs", () => {
     expect(operationPath("user", operationId)).toBe(`/api/trn/user/lol/operations/${operationId}`);
-    expect(() => operationPath("app", "https://example.com/steal")).toThrow(/identifier/);
-    expect(() => operationPath("app", "../admin/jobs")).toThrow(/identifier/);
+    expect(() => operationPath("app", "https://example.com/steal")).toThrow("Couldn't track this request. Try again.");
+    expect(() => operationPath("app", "../admin/jobs")).toThrow("Couldn't track this request. Try again.");
   });
 
   it("requires the new accepted contract", () => {
-    expect(() => acceptedOperation({ status: "queued" })).toThrow(/invalid/);
-    expect(() => acceptedOperation({ ...accepted, retryAfterSeconds: "2" })).toThrow(/invalid/);
-    expect(() => acceptedOperation({ ...accepted, retryAfterSeconds: -1 })).toThrow(/invalid/);
-    expect(() => acceptedOperation({ ...accepted, statusUrl: "" })).toThrow(/invalid/);
+    expect(() => acceptedOperation({ status: "queued" })).toThrow("Couldn't confirm that the request started. Try again.");
+    expect(() => acceptedOperation({ ...accepted, retryAfterSeconds: "2" })).toThrow("Couldn't confirm that the request started. Try again.");
+    expect(() => acceptedOperation({ ...accepted, retryAfterSeconds: -1 })).toThrow("Couldn't confirm that the request started. Try again.");
+    expect(() => acceptedOperation({ ...accepted, statusUrl: "" })).toThrow("Couldn't confirm that the request started. Try again.");
   });
 
   it("ignores returned absolute URLs and waits through nonterminal states", async () => {
@@ -62,7 +62,7 @@ describe("operation completion polling", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(operationStatus(overrides))));
     await expect(pollOperation(accepted, "app", new AbortController().signal, undefined, "live_game_probe", {
       region: "na", gameName: "Kronic", tagLine: "NA1"
-    })).rejects.toThrow(/invalid/);
+    })).rejects.toThrow("Couldn't confirm the request status. Try again.");
   });
 
   it("aborts the pending retry immediately when superseded or unmounted", async () => {
@@ -83,7 +83,7 @@ describe("operation completion polling", () => {
     vi.useFakeTimers();
     vi.stubGlobal("fetch", vi.fn(async () => response(operationStatus({ status: "running", retryAfterSeconds: 10 }))));
     const result = pollOperation(accepted, "app", new AbortController().signal);
-    const assertion = expect(result).rejects.toThrow(/completion has not been verified/);
+    const assertion = expect(result).rejects.toThrow(/The request may still be running/);
     await vi.advanceTimersByTimeAsync(OPERATION_TIMEOUT_MS);
     await assertion;
   });

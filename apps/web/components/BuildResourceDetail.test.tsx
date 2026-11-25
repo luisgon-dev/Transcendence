@@ -65,7 +65,7 @@ describe("BuildResourceDetail", () => {
     expect(within(rows[0]).getByText("19:00")).toBeTruthy();
     expect(within(rows[0]).getByText("+1.2 pp")).toBeTruthy();
     expect(within(rows[1]).getByText("6th item")).toBeTruthy();
-    expect(within(section).getByText(/Faded rows have under 100 games/)).toBeTruthy();
+    expect(within(section).getByText(/Faded rows have fewer than 100 games/)).toBeTruthy();
   });
 
   it("splits uses by role, folds the long champion tail, and hides timing when none was counted", async () => {
@@ -74,8 +74,8 @@ describe("BuildResourceDetail", () => {
     expect(screen.queryByRole("region", { name: "When it's bought" })).toBeNull();
     const roles = screen.getByRole("region", { name: "By role" });
     expect(within(roles).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
-      expect.stringContaining("Bottom"),
-      expect.stringContaining("Middle")
+      expect.stringContaining("Bot"),
+      expect.stringContaining("Mid")
     ]);
     expect(screen.getByText("2 more")).toBeTruthy();
   });

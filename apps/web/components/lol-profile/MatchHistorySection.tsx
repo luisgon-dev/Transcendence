@@ -342,7 +342,7 @@ const MatchHistoryCard = memo(function MatchHistoryCard({
               </p>
             ) : null}
             {!detailBusy && detail === null ? (
-              <p className="text-sm text-fg/75">Detailed stats are unavailable for this match.</p>
+              <p className="text-sm text-fg/75">This match has no detailed stats on file.</p>
             ) : null}
             {detail ? (
               <MatchScoreboard
@@ -467,9 +467,9 @@ export function MatchHistorySection({
           {!historyBusy && visibleMatches.length === 0 ? (
             <p className="surface-subtle rounded-card px-4 py-4 text-sm text-fg/80">
               {queue !== "ALL" || championFilter.trim() ? (
-                "No matches found for the current queue/champion filters."
+                "No matches found for these filters. Try a different queue or champion."
               ) : (
-                "No ranked matches are recorded yet. Use Update Now to fetch the latest history."
+                "No ranked matches are on file. Refresh the profile to fetch recent games."
               )}
             </p>
           ) : null}

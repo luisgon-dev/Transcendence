@@ -62,7 +62,7 @@ export default async function FavoritesPage() {
       <Toolbar
         eyebrow="Account"
         title="Favorites"
-        meta={<span>Saved players, with fresh live-game signals</span>}
+        meta={<span>Saved players and their latest live game checks</span>}
       />
 
       {result.authenticated ? <RiotAccountPanel /> : null}

@@ -20,63 +20,19 @@ export default function LoginPage() {
   return (
     <div className="auth-shell">
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(22rem,0.82fr)] lg:items-stretch">
-        <div className="page-panel grid content-between gap-8 p-6 sm:p-8">
-          <div>
-            <p className="type-kicker text-muted">Account Access</p>
-            <h1 className="type-panel-title mt-3 max-w-xl">
-              Keep favorite players and repeat routes within reach.
-            </h1>
-            <p className="type-lead mt-4 max-w-2xl">
-              Sign in when you want faster returns to the profiles, champions, and pages you check most often.
-            </p>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-            <div className="surface-subtle rounded-card p-4">
-              <p className="type-kicker text-muted">Favorites</p>
-              <p className="type-ui mt-2 text-fg/84">Pin summoner pages and keep your usual lookups out of the search loop.</p>
-            </div>
-            <div className="surface-subtle rounded-card p-4">
-              <p className="type-kicker text-muted">Faster return</p>
-              <p className="type-ui mt-2 text-fg/84">Jump back into current-patch research without rebuilding your path every visit.</p>
-            </div>
-            <div className="surface-subtle rounded-card p-4">
-              <p className="type-kicker text-muted">Verified main</p>
-              <p className="type-ui mt-2 text-fg/84">Use Riot Sign On to verify your main without sharing your Riot password.</p>
-            </div>
-          </div>
-
-          <div className="surface-subtle rounded-panel p-4">
-            <p className="type-kicker text-primary">Good first move</p>
-            <p className="type-ui mt-2 text-fg/78">
-              If you only need immediate patch context, the tier list is still the fastest way in.
-            </p>
-            <Link
-              href="/lol/tierlist"
-              className="type-ui mt-4 inline-flex items-center border-b border-border/45 px-0.5 pb-1 font-semibold text-fg/80 transition hover:border-primary/38 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/24 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
-            >
-              Open League tier list
-            </Link>
-          </div>
-        </div>
-
-        <Card className="auth-card w-full rounded-panel p-6 sm:p-7">
+        <Card className="auth-card w-full rounded-panel lg:col-start-2 lg:row-start-1 p-6 sm:p-7">
           <div className="relative z-[1]">
-            <p className="type-kicker text-muted">Account</p>
-            <h2 className="type-title mt-3">
+            <h1 className="type-title">
               Sign in
-            </h2>
-            <p className="type-ui mt-3 text-fg/75">
-              Sign in to keep favorite players and saved pages close.
-            </p>
+            </h1>
 
             <RiotAuthNotice />
             <div className="mt-6">
               <RiotRsoButton mode="login" returnTo="/account/favorites" label="Continue with Riot" />
             </div>
             <p className="mt-2 text-xs leading-5 text-muted">
-              Riot returns your verified Riot ID and PUUID. Transcendence uses the authorization
-              once and does not store Riot access or refresh tokens.
+              Riot shares your verified Riot ID and account identifier. Transcendence uses the
+              authorization once and discards Riot’s access and refresh tokens.
             </p>
             <div className="my-5 flex items-center gap-3 text-xs uppercase tracking-[0.16em] text-muted">
               <span className="h-px flex-1 bg-border" />
@@ -138,6 +94,45 @@ export default function LoginPage() {
             </p>
           </div>
         </Card>
+
+        <div className="page-panel grid content-between lg:col-start-1 lg:row-start-1 gap-8 p-6 sm:p-8">
+          <div>
+            <h2 className="type-panel-title max-w-xl">
+              Keep your favorite players handy
+            </h2>
+            <p className="type-lead mt-4 max-w-2xl">
+              Sign in to save players you look up often.
+            </p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
+            <div className="surface-subtle rounded-card p-4">
+              <p className="type-kicker text-muted">Favorites</p>
+              <p className="type-ui mt-2 text-fg/84">Add a player to Favorites from their profile.</p>
+            </div>
+            <div className="surface-subtle rounded-card p-4">
+              <p className="type-kicker text-muted">Live games</p>
+              <p className="type-ui mt-2 text-fg/84">Check whether a saved player is in a game from Favorites.</p>
+            </div>
+            <div className="surface-subtle rounded-card p-4">
+              <p className="type-kicker text-muted">Riot sign-in</p>
+              <p className="type-ui mt-2 text-fg/84">Continue with Riot to sign in without sharing your Riot password with Transcendence.</p>
+            </div>
+          </div>
+
+          <div className="surface-subtle rounded-panel p-4">
+            <p className="type-kicker text-primary">League stats</p>
+            <p className="type-ui mt-2 text-fg/78">
+              Check champion rankings on the tier list.
+            </p>
+            <Link
+              href="/lol/tierlist"
+              className="type-ui mt-4 inline-flex items-center border-b border-border/45 px-0.5 pb-1 font-semibold text-fg/80 transition hover:border-primary/38 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/24 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+            >
+              View tier list
+            </Link>
+          </div>
+        </div>
       </section>
     </div>
   );

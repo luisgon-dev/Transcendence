@@ -103,7 +103,7 @@ export async function generateMetadata({
   const title = `${championName} ${queue.label} Build, Runes${queue.hasRoles ? " and Counters" : ""}${patchLabel}`;
   const description = `Current ${queue.label} ${championName} builds, runes, win rates${queue.hasRoles ? ", matchups, and role stats" : ""}${patchLabel}.`;
   const canonical = `/lol/champions/${encodeURIComponent(championId)}`;
-  const image = socialImageUrl(title, "Champion analytics", "Builds, runes, counters, and trustworthy samples");
+  const image = socialImageUrl(title, "Champion analytics", "Builds, runes, counters, and game counts");
 
   return {
     title,
@@ -211,7 +211,7 @@ export default async function ChampionDetailPage({
     return (
       <BackendErrorCard
         title="Champion"
-        message="That champion route is invalid."
+        message="That champion link is invalid."
       />
     );
   }
@@ -655,13 +655,13 @@ async function ChampionSections({
           {profile.buildsComputedAtUtc ? <UpdatedAgo timestamp={profile.buildsComputedAtUtc} className="mt-1 text-xs" /> : null}
           {profile.buildsState === "Preparing" ? (
             <div role="status" className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-fg/75">
-              <p>Builds are being calculated for these filters.</p>
+              <p>Builds for these filters are still being calculated.</p>
               <RefreshAnalyticsButton />
             </div>
           ) : profile.buildsState === "Unavailable" || !builds ? (
-            <p className="mt-2 text-sm text-fg/75">Builds are unavailable for these filters.</p>
+            <p className="mt-2 text-sm text-fg/75">No builds are available for these filters.</p>
           ) : buildRows.length === 0 ? (
-            <p className="mt-2 text-sm text-fg/75">There are not enough games for these filters yet.</p>
+            <p className="mt-2 text-sm text-fg/75">Too few games match these filters. Try changing the patch, rank, or region.</p>
           ) : (
             <div className="mt-4 grid gap-4">
               {/* Sectioned, timing-aware build path (spells, skills, starters, boots, core, situational) */}
@@ -699,9 +699,9 @@ async function ChampionSections({
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-3 [&::-webkit-details-marker]:hidden">
                     <span className="flex items-center gap-2 text-sm font-semibold text-fg">
                       <ChevronGlyph />
-                      Observed variants · {buildRows.length}
+                      Builds seen in ranked · {buildRows.length}
                     </span>
-                    <span className="type-note text-muted">Descriptive, not adjusted</span>
+                    <span className="type-note text-muted">Raw win rates</span>
                   </summary>
                   <div className="border-t border-border/40 p-3">
                     <BuildVariants
@@ -736,14 +736,14 @@ async function ChampionSections({
             <>
               <h2 className="type-section">Matchups</h2>
               <div role="status" className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-fg/75">
-                <p>Matchups are being calculated for these filters.</p>
+                <p>Matchup stats for these filters are still being calculated.</p>
                 {profile.buildsState !== "Preparing" ? <RefreshAnalyticsButton /> : null}
               </div>
             </>
           ) : profile.matchupsState === "Unavailable" || !matchups ? (
             <>
               <h2 className="type-section">Matchups</h2>
-              <p className="mt-2 text-sm text-fg/75">Matchups are unavailable for these filters.</p>
+              <p className="mt-2 text-sm text-fg/75">No matchup stats are available for these filters.</p>
             </>
           ) : (
             <>

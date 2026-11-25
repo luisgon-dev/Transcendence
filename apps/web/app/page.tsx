@@ -27,14 +27,13 @@ import { selectStarterPicks } from "@/lib/homeGuidance";
 import { platformRegionToSlug } from "@/lib/lolRegions";
 import { DEFAULT_TIERLIST_RANK_TIER } from "@/lib/ranks";
 import { encodeRiotIdPath } from "@/lib/riotid";
-import { LANE_ROLES } from "@/lib/roles";
+import { LANE_ROLES, roleDisplayLabel } from "@/lib/roles";
 import { getAccessTokenOrRefresh } from "@/lib/sessionToken";
 import { championIconUrl, fetchChampionMap } from "@/lib/staticData";
 import { tierListBoardRows, type TierListBoardResponse } from "@/lib/tierlist";
 import { getTrnClient } from "@/lib/trnClient";
 
 type RiotAccountLink = components["schemas"]["RiotAccountLinkDto"];
-type LaneRole = (typeof LANE_ROLES)[number];
 
 // Shared focus-ring treatment for the page's bare <Link>s. Globals set
 // `*:focus-visible { outline: none }`, so every interactive element must paint
@@ -56,15 +55,6 @@ const PICK_ROW = cn(
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 focus-visible:ring-offset-surface"
 );
 
-// The names players actually use for each lane ("mid", "bot"), and the noun the hero line needs.
-const LANE_COPY: Record<LaneRole, { label: string; player: string }> = {
-  TOP: { label: "Top", player: "top laner" },
-  JUNGLE: { label: "Jungle", player: "jungler" },
-  MIDDLE: { label: "Mid", player: "mid laner" },
-  BOTTOM: { label: "Bot", player: "bot laner" },
-  UTILITY: { label: "Support", player: "support" }
-};
-
 // A famous account that proves the profile surface works without making the
 // visitor type anything. The hero search is how a visitor reaches their own.
 const SAMPLE_PROFILE = {
@@ -83,14 +73,14 @@ const GAME_PHASES = [
   },
   {
     phase: "Loading screen",
-    title: "Read all ten players",
-    description: "Ranks, recent form, champion pools, spells, and runes for the game in progress.",
+    title: "Scout a live game",
+    description: "Check both teams’ ranks, recent form, spells, and runes.",
     href: "/lol/live"
   },
   {
     phase: "Post-game",
     title: "Review the match",
-    description: `Scoreboard, gold lead, and builds for every game in a profile. Try ${SAMPLE_PROFILE.label}.`,
+    description: `Open ${SAMPLE_PROFILE.label} to see match scoreboards, gold leads, and builds.`,
     href: SAMPLE_PROFILE.href
   }
 ] as const;
@@ -187,7 +177,7 @@ function DatasetLine({ stats }: { stats: DatasetStats }) {
         </li>
         {stats.lastMatchIngestedAtUtc ? (
           <li>
-            <UpdatedAgo timestamp={stats.lastMatchIngestedAtUtc} prefix="Last game" />
+            <UpdatedAgo timestamp={stats.lastMatchIngestedAtUtc} prefix="Last match collected" />
           </li>
         ) : null}
       </ul>
@@ -248,8 +238,8 @@ export default async function LandingPage() {
           ) : null}
           <h1 id="home-heading" className="type-display mt-4">
             {lead
-              ? `${championDisplayName(leadChamp)} is the ${LANE_COPY[lead.role as LaneRole]?.player ?? "pick"} to beat.`
-              : "Look yourself up."}
+              ? `${championDisplayName(leadChamp)} tops the ${roleDisplayLabel(lead.role).toLowerCase()} tier list.`
+              : "Find your League profile"}
           </h1>
 
           {lead ? (
@@ -264,7 +254,7 @@ export default async function LandingPage() {
                 href={`/lol/champions/${lead.championId}?role=${lead.role}`}
                 className={INLINE_LINK}
               >
-                Build and matchups
+                Builds and matchups
                 <ArrowCornerIcon className="h-3 w-3" />
               </Link>
             </div>
@@ -293,7 +283,7 @@ export default async function LandingPage() {
                 Strongest by lane
               </h2>
               <p className="type-note mt-1 text-muted">
-                Graded against each lane&apos;s average, with thin samples pulled toward it.
+                Grades compare win rates with the lane average and give less weight to results from fewer games.
               </p>
             </div>
             <Link href="/lol/tierlist" className={INLINE_LINK}>
@@ -319,7 +309,7 @@ export default async function LandingPage() {
                 >
                   <h3 className="type-ui mb-2 flex items-center gap-2 font-semibold text-fg/80">
                     <LaneIcon role={role} className="h-4 w-4 text-muted" />
-                    {LANE_COPY[role].label}
+                    {roleDisplayLabel(role)}
                   </h3>
                   <ol className="grid gap-0.5">
                     {picks.map((entry, index) => {

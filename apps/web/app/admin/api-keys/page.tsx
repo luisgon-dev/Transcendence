@@ -7,15 +7,15 @@ export default async function AdminApiKeysPage() {
 
   return (
     <section className="page-panel p-4">
-      <h2 className="text-lg font-semibold">API Keys</h2>
+      <h2 className="text-lg font-semibold">API keys</h2>
       <div className="mt-3 overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="text-muted">
             <tr>
               <th className="py-2">Name</th>
-              <th className="py-2">Prefix</th>
+              <th className="py-2">Key prefix</th>
               <th className="py-2">Created</th>
-              <th className="py-2">Last Used</th>
+              <th className="py-2">Last used</th>
               <th className="py-2">State</th>
               <th className="py-2 text-right">Actions</th>
             </tr>
@@ -36,7 +36,7 @@ export default async function AdminApiKeysPage() {
                         type="submit"
                         className="surface-chip rounded-full px-3 py-1 text-xs text-fg/85 transition hover:bg-surface-2/72"
                       >
-                        Rotate
+                        Rotate key
                       </button>
                     </form>
                     <form action={revokeApiKeyAction}>
@@ -45,7 +45,7 @@ export default async function AdminApiKeysPage() {
                         type="submit"
                         className="rounded-full border border-danger/60 px-3 py-1 text-xs text-danger transition hover:bg-danger/10"
                       >
-                        Revoke
+                        Revoke key
                       </button>
                     </form>
                   </div>

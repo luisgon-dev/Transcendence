@@ -61,7 +61,7 @@ describe("DatasetFigures", () => {
   it("shows how long ago the last match was ingested", () => {
     render(<DatasetFigures stats={stats()} />);
 
-    expect(valueFor("Last ingest").textContent).toBe("12 min ago");
+    expect(valueFor("Last match collected").textContent).toBe("12 min ago");
   });
 
   it("leaves out figures the backend could not determine instead of showing zero", () => {
@@ -72,7 +72,7 @@ describe("DatasetFigures", () => {
     );
 
     expect(screen.queryByText("Players indexed")).toBeNull();
-    expect(screen.queryByText("Last ingest")).toBeNull();
+    expect(screen.queryByText("Last match collected")).toBeNull();
     expect(document.querySelectorAll("dt")).toHaveLength(4);
   });
 });

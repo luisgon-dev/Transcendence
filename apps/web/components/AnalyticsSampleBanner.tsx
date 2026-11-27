@@ -40,7 +40,7 @@ export function AnalyticsSampleBanner({
           card: "border-success/35 bg-success/10",
           badge: "border-success/35 bg-success/20 text-fg",
           kicker: "Stable sample",
-          summary: "Enough recent games to trust the current trend."
+          summary: "This selection meets the recommended game count."
         }
       : normalized.status === "low_sample"
         ? {
@@ -49,23 +49,23 @@ export function AnalyticsSampleBanner({
             kicker: "Low sample",
             summary:
               shortfall > 0
-                ? `${shortfall} more recent games would make this read steadier.`
-                : "Few games are available for these filters."
+                ? `${shortfall === 1 ? "1 more game" : `${shortfall} more games`} to reach the recommended sample.`
+                : "Few games match these filters. Results may change as more games are collected."
           }
         : {
             card: "border-danger/40 bg-danger/10",
             badge: "border-danger/40 bg-danger/20 text-fg",
-            kicker: "No games in this scope",
+            kicker: "No games match these filters",
             summary: "Select a different patch or adjust the filters."
           };
   const phaseLabel =
     normalized.patchPhase === "bootstrap"
       ? "Patch launch"
       : normalized.patchPhase === "provisional"
-        ? "Patch settling"
+        ? "Early patch"
         : normalized.patchPhase === "maturing"
-          ? "Patch maturing"
-          : "Patch stable";
+          ? "Sample growing"
+          : "Established patch";
 
   const chips = (
     <>
@@ -76,7 +76,7 @@ export function AnalyticsSampleBanner({
         {patchAgeLabel}
       </span>
       <span className="surface-chip rounded-full px-3 py-1.5 text-xs text-fg/72">
-        {coverage}% of target
+        {coverage}% of recommended games
       </span>
     </>
   );

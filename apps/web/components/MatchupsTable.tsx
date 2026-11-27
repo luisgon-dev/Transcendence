@@ -73,7 +73,7 @@ export function MatchupsTable({
           </button>
         </div>
       </div>
-      <div className="mt-4 overflow-x-auto focus-visible:outline-2 focus-visible:outline-primary" tabIndex={0} role="region" aria-label="Champion matchup statistics">
+      <div className="mt-4 overflow-x-auto focus-visible:outline-2 focus-visible:outline-primary" tabIndex={0} role="region" aria-label="Champion matchups">
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead className="type-overline text-muted">
             <tr className="border-b border-border/30">
@@ -97,7 +97,7 @@ export function MatchupsTable({
             {sorted.length === 0 ? (
               <tr>
                 <td colSpan={4} className="py-4 text-sm text-muted">
-                  No matchup data is available for the selected filters yet.
+                  No matchup stats match these filters yet.
                 </td>
               </tr>
             ) : (

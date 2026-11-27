@@ -19,7 +19,7 @@ export function performanceExplanation(performance: MatchPerformance): string {
     `${percentage(performance.visionShare)} vision share`,
     `${performance.csPerMin.toFixed(1)} CS/min`
   ].join(", ");
-  return `${rank}. ${performance.score.toFixed(1)} impact score from team-relative combat, economy, vision, farm, and survival. ${inputs}.`;
+  return `${rank}. ${performance.score.toFixed(1)} impact score based on combat, gold, vision, farm, and survival relative to this team. ${inputs}.`;
 }
 
 export function PerformanceIndicator({

@@ -78,7 +78,7 @@ export function FavoriteListClient({
     return (
       <EmptyState
         title="No saved players yet"
-        description="Open any League player profile and use Add Favorite to pin it here. Fresh worker observations will surface when a saved player enters a game."
+        description="Open a player profile and choose Add to favorites. Saved players and their latest live game checks appear here."
         action={
           <Link href="/lol/leaderboards" className="type-ui font-semibold text-primary hover:underline">
             Browse players on the leaderboards
@@ -122,7 +122,7 @@ export function FavoriteListClient({
                   )}
                   {favorite.isLive ? (
                     <span className="rounded-control border border-success/35 bg-success/10 px-2 py-0.5 text-xs font-semibold text-success">
-                      Live now
+                      In game at last check
                     </span>
                   ) : null}
                 </div>
@@ -130,7 +130,7 @@ export function FavoriteListClient({
                   {favorite.platformRegion} · Added {new Date(favorite.createdAtUtc).toLocaleDateString()}
                   {favorite.liveObservedAtUtc
                     ? ` · Checked ${new Date(favorite.liveObservedAtUtc).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
-                    : " · Awaiting first live check"}
+                    : " · Live game check pending"}
                 </p>
               </div>
 

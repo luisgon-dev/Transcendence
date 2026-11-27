@@ -64,7 +64,7 @@ describe("About the data page", () => {
 
     render(await AboutPage());
 
-    expect(screen.getByText("Dataset figures are not available yet")).toBeTruthy();
+    expect(screen.getByText("Match counts are unavailable")).toBeTruthy();
     expect(screen.queryByRole("table")).toBeNull();
     expect(screen.queryByText("Matches stored")).toBeNull();
     expect(screen.getByText(/ladders on every crawled platform/)).toBeTruthy();

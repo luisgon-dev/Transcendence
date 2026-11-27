@@ -54,7 +54,7 @@ export function FavoriteButton({
         );
         if (active && match) setFavoriteId(match.id);
       } catch {
-        // ignore — button falls back to "Add Favorite"
+        // ignore — button falls back to "Add to favorites"
       }
     })();
     return () => {
@@ -110,7 +110,7 @@ export function FavoriteButton({
   }
 
   const added = favoriteId !== null;
-  const label = busy ? (added ? "Removing…" : "Saving…") : added ? "Added ✓" : "Add Favorite";
+  const label = busy ? (added ? "Removing…" : "Saving…") : added ? "Saved" : "Add to favorites";
 
   return (
     <div className="flex items-center gap-3">

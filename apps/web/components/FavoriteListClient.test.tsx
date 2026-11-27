@@ -36,7 +36,7 @@ describe("FavoriteListClient", () => {
     const section = screen.getByRole("region", { name: "Saved players" });
     const cards = within(section).getAllByText(/Player#/, { selector: "a" });
     expect(cards[0].textContent).toBe("Live Player#KR1");
-    expect(screen.getByText("Live now")).toBeTruthy();
+    expect(screen.getByText("In game at last check")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Scout live game" }).getAttribute("href")).toBe(
       "/lol/live?region=kr&riotId=Live%20Player%23KR1"
     );

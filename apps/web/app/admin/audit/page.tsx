@@ -6,16 +6,16 @@ export default async function AdminAuditPage() {
 
   return (
     <section className="rounded-2xl border border-border/70 bg-surface/40 p-4">
-      <h2 className="text-lg font-semibold">Audit Log</h2>
+      <h2 className="text-lg font-semibold">Audit log</h2>
       <div className="mt-3 overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="text-muted">
             <tr>
               <th className="py-2">When</th>
-              <th className="py-2">Actor</th>
+              <th className="py-2">Performed by</th>
               <th className="py-2">Action</th>
               <th className="py-2">Target</th>
-              <th className="py-2">Status</th>
+              <th className="py-2">Result</th>
             </tr>
           </thead>
           <tbody>
@@ -27,7 +27,7 @@ export default async function AdminAuditPage() {
                 <td className="py-2">
                   {[row.targetType, row.targetId].filter(Boolean).join(":") || "-"}
                 </td>
-                <td className="py-2">{row.isSuccess ? "success" : "failed"}</td>
+                <td className="py-2">{row.isSuccess ? "Succeeded" : "Failed"}</td>
               </tr>
             ))}
           </tbody>

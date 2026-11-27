@@ -159,7 +159,7 @@ export function ProfileHeroCard({
 
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <Button variant="outline" onClick={onRefresh} disabled={busy}>
-              {busy ? "Starting…" : "Update Now"}
+              {busy ? "Requesting refresh…" : "Refresh profile"}
             </Button>
             <Link className="min-h-11 content-center px-3 text-sm font-semibold text-primary" href={links.live}>Live game</Link>
             <Link className="min-h-11 content-center px-3 text-sm font-semibold text-primary" href={links.multi}>Scout lobby</Link>

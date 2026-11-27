@@ -51,7 +51,7 @@ export default async function ChampionsPage({
             ? "This page is taking too long to load."
             : tierListRes.errorKind === "unreachable"
               ? "We couldn't load champion data right now."
-              : "We couldn't load champion stats."
+              : "Couldn't load champion stats. Check back shortly."
         }
         requestId={tierListRes.requestId}
         detail={
@@ -107,7 +107,7 @@ export default async function ChampionsPage({
         title="Champions"
         meta={
           <span>{tierListRes.body?.patchSelection?.effectivePatch
-            ? `Patch ${tierListRes.body.patchSelection.effectivePatch} builds, win rates, and matchups`
+            ? `Builds, win rates, and matchups for patch ${tierListRes.body.patchSelection.effectivePatch}`
             : "Builds, win rates, and matchups"}</span>
         }
         filters={

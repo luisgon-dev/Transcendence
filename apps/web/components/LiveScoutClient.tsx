@@ -47,18 +47,15 @@ export function LiveScoutClient({
     <div className="grid gap-6">
       <header className="page-hero grid gap-5 p-5 md:grid-cols-[minmax(0,1fr)_minmax(300px,0.72fr)] md:p-7">
         <div className="max-w-2xl">
-          <p className="type-kicker text-primary">Live game scout</p>
-          <h1 className="mt-3 type-page-title">Read both teams while the match is live.</h1>
+          <h1 className="mt-3 type-page-title">Scout a live game</h1>
           <p className="mt-3 max-w-[64ch] text-fg/72">
-            Check a Riot ID for an active game, then compare ladder rank, recent form, streaks,
-            champion pools, summoner spells, and selected runes. Active games refresh every minute.
+            Enter a Riot ID to see both teams’ ranks, recent form, champion pools, spells, and runes.
           </p>
         </div>
         <div className="surface-subtle self-end rounded-card px-4 py-3">
-          <p className="type-kicker text-muted">Freshness contract</p>
+          <p className="type-kicker text-muted">Last checked</p>
           <p className="mt-2 text-sm leading-6 text-fg/78">
-            Results come from the latest worker observation. The checked time and data age stay
-            visible so a stale snapshot never looks live.
+            Results show the last time the game was checked. Active games update every minute.
           </p>
         </div>
       </header>
@@ -117,10 +114,9 @@ export function LiveScoutClient({
         </section>
       ) : (
         <div className="rounded-card border border-dashed border-border px-6 py-10 text-center">
-          <p className="type-section">The live matchup appears here</p>
+          <p className="type-section mx-auto">No player selected</p>
           <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-muted">
-            Search any tracked player. If they are in game, both teams are grouped by side with
-            clearly labeled stored-data signals—not hidden certainty scores.
+            Enter a Riot ID above to check for an active game.
           </p>
         </div>
       )}

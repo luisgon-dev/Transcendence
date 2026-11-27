@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Terms & Conditions — Transcendence"
+  title: "Terms and conditions — Transcendence"
 };
 
 const GITHUB_REPO_URL = "https://github.com/luisgon-dev/Transcendence";
@@ -10,23 +10,15 @@ const GITHUB_REPO_URL = "https://github.com/luisgon-dev/Transcendence";
 const linkClass =
   "font-medium text-fg underline decoration-border-strong underline-offset-2 transition-colors hover:decoration-primary";
 
-function SectionHeading({ index, title, id }: { index: string; title: string; id: string }) {
-  return (
-    <div className="flex items-baseline gap-3">
-      <span className="type-tabular text-sm font-semibold tabular-nums text-muted">{index}</span>
-      <h2 id={id} className="type-title scroll-mt-24 text-fg">
-        {title}
-      </h2>
-    </div>
-  );
+function SectionHeading({ title, id }: { title: string; id: string }) {
+  return <h2 id={id} className="type-title scroll-mt-24 text-fg">{title}</h2>;
 }
 
 export default function TermsPage() {
   return (
     <article className="mx-auto max-w-2xl">
       <header className="border-b border-border pb-8">
-        <p className="type-overline text-muted">Legal</p>
-        <h1 className="type-display mt-3">Terms &amp; Conditions</h1>
+        <h1 className="type-display mt-3">Terms and conditions</h1>
         <p className="type-note mt-4 text-muted">
           Last updated March 2026 · Transcendence is free and open-source under GPL-3.0.
         </p>
@@ -35,7 +27,7 @@ export default function TermsPage() {
       <div className="mt-12 grid gap-12 [&_p]:max-w-none [&_li]:max-w-none">
         {/* 01 — Riot Games Disclaimer */}
         <section className="grid gap-4">
-          <SectionHeading index="01" id="riot" title="Riot Games Disclaimer" />
+          <SectionHeading id="riot" title="Riot Games Disclaimer" />
           <div className="surface-subtle rounded-card p-4">
             <p className="type-ui leading-relaxed text-fg/90">
               Transcendence isn&apos;t endorsed by Riot Games and doesn&apos;t reflect the views or opinions
@@ -60,7 +52,7 @@ export default function TermsPage() {
 
         {/* 02 — Terms of Service */}
         <section className="grid gap-4 border-t border-border/60 pt-12">
-          <SectionHeading index="02" id="terms" title="Terms of Service" />
+          <SectionHeading id="terms" title="Terms of Service" />
           <div className="grid gap-4 type-note leading-relaxed text-muted">
             <p>
               Transcendence is a free, open-source League of Legends analytics platform. By using this
@@ -101,7 +93,7 @@ export default function TermsPage() {
 
         {/* 03 — Privacy Policy */}
         <section className="grid gap-4 border-t border-border/60 pt-12">
-          <SectionHeading index="03" id="privacy" title="Privacy Policy" />
+          <SectionHeading id="privacy" title="Privacy Policy" />
           <div className="grid gap-4 type-note leading-relaxed text-muted">
             <h3 className="type-meta text-fg/80">Information We Collect</h3>
             <ul className="grid list-disc gap-1.5 pl-5 marker:text-border-strong">
@@ -141,7 +133,7 @@ export default function TermsPage() {
 
         {/* 04 — Open Source License */}
         <section className="grid gap-4 border-t border-border/60 pt-12">
-          <SectionHeading index="04" id="license" title="Open Source License" />
+          <SectionHeading id="license" title="Open Source License" />
           <p className="type-note leading-relaxed text-muted">
             Transcendence is open-source software licensed under the{" "}
             <Link href={`${GITHUB_REPO_URL}/blob/main/LICENSE`} target="_blank" rel="noreferrer" className={linkClass}>

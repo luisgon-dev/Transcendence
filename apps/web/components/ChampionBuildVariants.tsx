@@ -53,8 +53,7 @@ export function BuildVariants({
   return (
     <div className="grid gap-4">
       <p className="type-note text-muted">
-        Recommended balances sample size and results (games × win rate). An alternative may show a
-        higher rate from fewer games.
+        The recommended build has the most observed wins. A higher win rate may come from fewer games.
       </p>
       {rows.map((b, idx) => (
         <details
@@ -65,7 +64,7 @@ export function BuildVariants({
           <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-3 [&::-webkit-details-marker]:hidden">
             <span className="flex items-center gap-2 text-sm font-semibold text-fg">
               <ChevronGlyph />
-              {idx === 0 ? "Recommended Build · Most proven" : `Alternative ${idx}`}
+              {idx === 0 ? "Recommended build" : `Alternative ${idx}`}
             </span>
             <span className="text-xs text-muted">
               <WinRateText value={b.winRate} decimals={1} games={b.games} />

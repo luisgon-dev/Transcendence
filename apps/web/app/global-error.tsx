@@ -45,8 +45,8 @@ export default function GlobalError({
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <main className="mx-auto flex w-full max-w-[1440px] flex-1 flex-col px-4 py-8 md:px-6 md:py-10 lg:px-8">
           <RouteError
-            title="Something went wrong"
-            message="The application hit an unexpected error and couldn't render."
+            title="Transcendence could not load"
+            message="Reload to try opening Transcendence again."
             error={error}
             reset={reset}
           />

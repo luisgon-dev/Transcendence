@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 export default function Loading() {
   return (
     <div className="grid gap-8">
+      <p className="sr-only" role="status">Loading champion stats…</p>
       <header className="page-hero relative p-5 md:p-8">
         <div className="flex flex-col gap-5">
           <div className="flex items-center gap-4">

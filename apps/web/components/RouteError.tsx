@@ -22,7 +22,7 @@ export type RouteErrorProps = {
  */
 export function RouteError({
   title = "Something went wrong",
-  message = "An unexpected error interrupted this page.",
+  message = "We couldn't load this page.",
   error,
   reset
 }: RouteErrorProps) {
@@ -36,7 +36,7 @@ export function RouteError({
     <BackendErrorCard
       title={title}
       message={message}
-      hint="You can retry, or reload the page if the problem persists."
+      hint="If trying again doesn't work, reload the page."
       detail={error.digest ? `Error reference: ${error.digest}` : null}
     >
       <Button type="button" onClick={() => reset()}>

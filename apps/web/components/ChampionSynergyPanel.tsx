@@ -39,10 +39,10 @@ export function ChampionSynergyPanel({
     <Card className="overflow-hidden p-0" id="synergies">
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border/40 px-5 py-4">
         <div>
-          <p className="type-kicker text-primary">Duo chemistry</p>
+          <p className="type-kicker text-primary">Champion pairings</p>
           <h2 className="type-section mt-2">{partnerHeading(synergies.role)}</h2>
           <p className="type-ui mt-1 text-muted">
-            Same-team outcomes with {championName} as {roleDisplayLabel(synergies.role)}.
+            Teammates for {championName} as {roleDisplayLabel(synergies.role)}.
           </p>
         </div>
         {synergies.totalGames > 0 ? (
@@ -54,7 +54,7 @@ export function ChampionSynergyPanel({
 
       {partners.length === 0 ? (
         <p className="p-5 text-sm text-muted">
-          No partner pairing has enough games in this region, rank, and patch scope yet.
+          Too few games match these filters to compare partners.
         </p>
       ) : (
         <div className="grid gap-px bg-border/35 sm:grid-cols-2 xl:grid-cols-5">
@@ -113,7 +113,7 @@ export function ChampionSynergyPanel({
       )}
 
       <p className="border-t border-border/35 px-5 py-3 text-xs leading-5 text-muted">
-        Ranked by confidence-adjusted lift, not raw win rate. Pair results are descriptive and still reflect player skill, patch balance, and selection effects.
+        Pairs are ranked by how far their win rate is above the champion’s usual win rate, with less weight given to pairs with fewer games. Player skill and patch balance can also affect these results.
       </p>
     </Card>
   );

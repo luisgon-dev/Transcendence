@@ -11,7 +11,7 @@ export function SiteFooter() {
             <div>
               <p className="type-kicker text-muted">Transcendence</p>
               <p className="type-ui mt-2 max-w-2xl text-fg/74">
-                Fast League lookups, current-patch analytics, and player routes that stay readable under pressure.
+                Look up League players, compare champion builds, and review your matches.
               </p>
             </div>
             <p className="type-note measure text-muted">

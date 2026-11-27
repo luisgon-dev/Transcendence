@@ -255,9 +255,9 @@ export async function BuildResourceDetail({
           {showBuildLabLinks ? (
             <Link
               href="/lol/builds"
-              className="type-ui font-semibold text-primary transition-colors hover:text-primary"
+              className="type-ui w-full font-semibold text-primary transition-colors hover:text-primary sm:w-auto"
             >
-              Compare in champion context
+              Compare in Build Lab
             </Link>
           ) : null}
         </div>
@@ -309,9 +309,8 @@ export async function BuildResourceDetail({
                   </p>
                 </div>
                 <p className="type-caption max-w-md text-muted">
-                  Edge compares it with every other {isBoots ? "pair of boots" : "item finished in the same slot"},
-                  in games with the same gold lead.
-                  {purchases.stages.some((stage) => stage.isLowSample) ? " Faded rows have under 100 games." : null}
+                  Win-rate difference compares this {isBoots ? "pair of boots with other boots" : "item with other items finished in the same slot"} at similar gold leads.
+                  {purchases.stages.some((stage) => stage.isLowSample) ? " Faded rows have fewer than 100 games." : null}
                 </p>
               </div>
               <div className="border-t border-border">
@@ -325,7 +324,7 @@ export async function BuildResourceDetail({
                         <Th align="right">Games</Th>
                         <Th align="right">Win rate</Th>
                         <Th align="right" className="pr-4 sm:pr-5">
-                          Edge
+                          Win-rate difference
                         </Th>
                       </tr>
                     </thead>
@@ -380,12 +379,12 @@ export async function BuildResourceDetail({
                 {isItems ? "Who builds it" : "Who takes it"}
               </h2>
               <p className="type-caption max-w-xl text-muted">
-                Pick rate is within each champion-role sample; share is that pair&apos;s cut of every use.
+                Pick rate is how often that champion takes it in that role. Share is how much of its total use comes from that champion and role.
               </p>
             </div>
             {response.championStats.length === 0 ? (
               <p className="border-t border-border px-5 py-6 text-sm text-muted">
-                No champion-level sample is available for this scope.
+                No games are available to break down by champion with these filters.
               </p>
             ) : (
               <div className="border-t border-border">
@@ -509,9 +508,8 @@ export async function BuildResourceDetail({
       </div>
 
       <p className="type-caption max-w-3xl text-muted">
-        Descriptive outcomes from completed Ranked Solo/Duo games. Build timing, champion strength,
-        player skill, and game length all move the result; a higher row does not prove the{" "}
-        {isItems ? "item" : "rune"} caused the win.
+        These stats come from completed Ranked Solo/Duo games. Build timing, champion strength,
+        player skill, and game length can all affect win rates.
       </p>
     </div>
   );

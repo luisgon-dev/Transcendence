@@ -12,7 +12,7 @@ export default function Error({
   return (
     <RouteError
       title="Admin"
-      message="We couldn't render this admin page."
+      message="We couldn't load this admin page."
       error={error}
       reset={reset}
     />

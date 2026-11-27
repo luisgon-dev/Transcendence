@@ -6,10 +6,10 @@ import { usePathname } from "next/navigation";
 const links = [
   { href: "/admin", label: "Pipeline", match: (p: string) => p === "/admin" },
   { href: "/admin/jobs?state=enqueued", label: "Jobs", match: (p: string) => p.startsWith("/admin/jobs") },
-  { href: "/admin/logs", label: "Service Logs", match: (p: string) => p.startsWith("/admin/logs") },
-  { href: "/admin/pro-summoners", label: "Pro Summoners", match: (p: string) => p.startsWith("/admin/pro-summoners") },
-  { href: "/admin/api-keys", label: "API Keys", match: (p: string) => p.startsWith("/admin/api-keys") },
-  { href: "/admin/audit", label: "Audit Log", match: (p: string) => p.startsWith("/admin/audit") }
+  { href: "/admin/logs", label: "Service logs", match: (p: string) => p.startsWith("/admin/logs") },
+  { href: "/admin/pro-summoners", label: "Tracked players", match: (p: string) => p.startsWith("/admin/pro-summoners") },
+  { href: "/admin/api-keys", label: "API keys", match: (p: string) => p.startsWith("/admin/api-keys") },
+  { href: "/admin/audit", label: "Audit log", match: (p: string) => p.startsWith("/admin/audit") }
 ];
 
 export function AdminNav() {

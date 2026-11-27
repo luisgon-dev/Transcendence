@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 export default function Loading() {
   return (
     <div className="grid gap-4">
+      <p className="sr-only" role="status">Loading tier list…</p>
       <Card className="p-5">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="grid gap-2">

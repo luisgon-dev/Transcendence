@@ -90,7 +90,7 @@ export function ProfileSidebar({
         <SectionHeading aside={`Updated ${profile.rankAge?.ageDescription ?? "recently"}`}>Ranked</SectionHeading>
         {rankedEntries.length === 0 ? (
           <p className="mt-4 text-sm text-fg/80">
-            No ranked results yet. This player is currently unranked in Solo/Duo and Flex.
+            Unranked in Solo/Duo and Flex.
           </p>
         ) : (
           <div className="mt-3 grid divide-y divide-border/70">
@@ -146,7 +146,7 @@ export function ProfileSidebar({
               <div>
                 <p className="type-caption font-semibold text-fg/85">Solo/Duo climb</p>
                 <p className="type-caption text-muted">
-                  {soloSeries.length} snapshots · {new Date(soloProgression[0].recordedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}–{new Date(soloProgression.at(-1)!.recordedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                  {soloSeries.length} rank checks · {new Date(soloProgression[0].recordedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}–{new Date(soloProgression.at(-1)!.recordedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                 </p>
               </div>
               <p className={soloDelta != null && soloDelta >= 0 ? "type-caption font-semibold text-success" : "type-caption font-semibold text-danger"}>
@@ -155,7 +155,7 @@ export function ProfileSidebar({
             </div>
             <Sparkline values={soloSeries} width={240} height={44} className="h-11 w-full" />
             <p className="type-caption text-muted">
-              Observed rank changes, normalized across divisions; not a Riot per-game LP ledger.
+              Estimated rank change across divisions, based on saved rank checks.
             </p>
             <ol className="sr-only">
               {soloProgression.map((point, index) => (
@@ -269,7 +269,7 @@ export function ProfileSidebar({
                     </span>
                     <span className="type-caption text-muted">
                       {mate.gamesTogether} {plural(mate.gamesTogether, "game")} together
-                      {mate.sameTeamGames > 0 ? ` · ${mate.sameTeamGames} as duo` : ""}
+                      {mate.sameTeamGames > 0 ? ` · ${mate.sameTeamGames} on the same team` : ""}
                     </span>
                   </span>
                   {wr != null ? <DataBar value={wr} games={mate.sameTeamGames} /> : null}

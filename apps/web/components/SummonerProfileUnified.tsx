@@ -41,9 +41,9 @@ import { Skeleton } from "@/components/ui/Skeleton";
 export type { SummonerProfileResponse } from "@/components/lol-profile/shared";
 
 const SORT_OPTIONS: Array<{ value: MatchSortOption; label: string }> = [
-  { value: "DATE_DESC", label: "Most Recent" },
+  { value: "DATE_DESC", label: "Most recent" },
   { value: "KDA_DESC", label: "Best KDA" },
-  { value: "DMG_DESC", label: "Highest Damage" }
+  { value: "DMG_DESC", label: "Highest damage" }
 ];
 
 const MatchHistorySection = dynamic(
@@ -194,7 +194,7 @@ export function SummonerProfileClient({
         />
         {staticData.staticUnavailable ? (
           <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface px-4 py-3 text-sm text-fg">
-            <p>Some game images and names are temporarily unavailable.</p>
+            <p>Some champion, item, or rune names and images couldn’t load.</p>
             <Button variant="outline" size="sm" disabled={staticData.staticBusy} onClick={staticData.retryStaticData}>
               {staticData.staticBusy ? "Retrying…" : "Retry game data"}
             </Button>
@@ -213,8 +213,8 @@ export function SummonerProfileClient({
               title={`We couldn’t find ${title}`}
               description={
                 lookup.error?.message
-                  ? `${lookup.error.message} Double-check the Riot ID and that ${region.toUpperCase()} is the right region, or queue an update to fetch fresh data.`
-                  : `No profile in ${region.toUpperCase()} matched this Riot ID. Double-check the spelling and region, or queue an update to fetch fresh data.`
+                  ? `${lookup.error.message} Check the Riot ID and region (${region.toUpperCase()}), or refresh the profile.`
+                  : `Check the spelling and region (${region.toUpperCase()}). Refresh the profile to check for new data.`
               }
               action={
                 <div className="flex flex-wrap items-center justify-center gap-2">
@@ -223,7 +223,7 @@ export function SummonerProfileClient({
                     onClick={() => void lookup.queueRefresh()}
                     disabled={lookup.busy}
                   >
-                    {lookup.busy ? "Updating…" : "Update now"}
+                    {lookup.busy ? "Updating…" : "Refresh profile"}
                   </Button>
                   <Link href="/" className={buttonClassName({ variant: "outline" })}>
                     New search

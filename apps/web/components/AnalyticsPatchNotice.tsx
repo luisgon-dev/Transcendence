@@ -35,7 +35,7 @@ export function AnalyticsPatchNotice({
           {state === "Preparing" ? <RefreshAnalyticsButton /> : null}
           {latestHref ? (
             <Link href={latestHref} className="font-semibold text-primary hover:underline">
-              View latest published stats
+              View the latest patch with stats
             </Link>
           ) : null}
         </div>

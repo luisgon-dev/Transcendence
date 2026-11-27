@@ -24,19 +24,19 @@ function regionIdentity(value: string): string {
 }
 
 export function operationPath(scope: "app" | "user", operationId: string): string {
-  if (!OPERATION_ID.test(operationId)) throw new Error("The operation identifier is invalid.");
+  if (!OPERATION_ID.test(operationId)) throw new Error("Couldn't track this request. Try again.");
   // Never navigate to a returned backend URL or allow it to select a different BFF scope.
   return `/api/trn/${scope}/lol/operations/${operationId}`;
 }
 
 export function acceptedOperation(value: unknown): OperationAccepted {
-  if (!value || typeof value !== "object") throw new Error("The operation response is invalid.");
+  if (!value || typeof value !== "object") throw new Error("Couldn't confirm that the request started. Try again.");
   const accepted = value as OperationAccepted;
   if (
     typeof accepted.operationId !== "string" || !OPERATION_ID.test(accepted.operationId) ||
     typeof accepted.statusUrl !== "string" || !accepted.statusUrl ||
     !Number.isInteger(accepted.retryAfterSeconds) || accepted.retryAfterSeconds < 0
-  ) throw new Error("The operation response is invalid.");
+  ) throw new Error("Couldn't confirm that the request started. Try again.");
   return accepted;
 }
 
@@ -71,7 +71,7 @@ export async function pollOperation(
   signal.throwIfAborted();
   signal.addEventListener("abort", abort, { once: true });
   const deadline = setTimeout(() => controller.abort(new Error(
-    "This operation is taking longer than expected. It may still be processing; completion has not been verified."
+    "This is taking longer than expected. The request may still be running. Check again shortly."
   )), OPERATION_TIMEOUT_MS);
   let retry = accepted.retryAfterSeconds;
   try {
@@ -79,7 +79,7 @@ export async function pollOperation(
       if (retry > 0) await delay(Math.min(10_000, Math.max(1_000, retry * 1_000)), controller.signal);
       const response = await fetch(path, { cache: "no-store", signal: controller.signal });
       const json = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(json?.message ?? `Operation status request failed (${response.status}).`);
+      if (!response.ok) throw new Error(json?.message ?? `Couldn't check the request status. Try again shortly (${response.status}).`);
       const status = json as OperationStatus | null;
       if (
         !status || status.operationId !== accepted.operationId || !STATES.has(status.status) ||
@@ -93,13 +93,13 @@ export async function pollOperation(
         !Array.isArray(status.phases) || !status.result ||
         !Number.isInteger(status.retryAfterSeconds) || status.retryAfterSeconds < 0 ||
         (TERMINAL.has(status.status) && !Number.isFinite(Date.parse(status.completedAtUtc ?? "")))
-      ) throw new Error("The operation status response is invalid.");
+      ) throw new Error("Couldn't confirm the request status. Try again.");
       controller.signal.throwIfAborted();
       onProgress?.(status);
       if (TERMINAL.has(status.status)) return status;
       retry = Math.max(1, status.retryAfterSeconds);
     }
-    throw new Error("Completion has not been verified. The operation may still be processing; check again shortly.");
+    throw new Error("The request may still be running. Check again shortly.");
   } catch (error) {
     if (controller.signal.aborted) throw controller.signal.reason;
     throw error;
@@ -110,5 +110,10 @@ export async function pollOperation(
 }
 
 export function operationFailure(status: OperationStatus): string {
-  return `The ${status.kind.replaceAll("_", " ")} failed${status.errorCode ? ` (${status.errorCode})` : ""}. Stored data has been retained.`;
+  const message = status.kind === "live_game_probe"
+    ? "Couldn't check the live game"
+    : status.kind === "summoner_refresh"
+      ? "Couldn't refresh the profile"
+      : "Couldn't complete the request";
+  return `${message}${status.errorCode ? ` (${status.errorCode})` : ""}. Any saved data has been kept. Try again.`;
 }

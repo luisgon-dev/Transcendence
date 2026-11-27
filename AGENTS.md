@@ -90,7 +90,7 @@ If you are not sure which doc to update, add a short note to the PR explaining w
 
 ## Repo Notes
 
-- Backend targets .NET 11 (SDK 11.0.100 pinned in `global.json`; stable EF Core/Npgsql 10 remain paired)
+- Backend targets .NET 11 (SDK 11.0.100 pinned in `global.json`; EF Core, dotnet-ef and Npgsql 11 remain paired)
 - Web frontend lives in `apps/web` (Next.js App Router)
 - OpenAPI spec is committed under `openapi/`
 - TS client generation lives in `packages/api-client`

@@ -230,7 +230,7 @@ public sealed class MatchArchivePostgresTests(PostgresIntegrationFixture fixture
     {
         var match = await SeedAsync(facts: true);
         await db.Database.ExecuteSqlRawAsync("CREATE TABLE _patch_archive_pending (\"Id\" uuid PRIMARY KEY)");
-        await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO _patch_archive_pending (\"Id\") VALUES ({match.Id})");
+        await db.Database.ExecuteSqlAsync($"INSERT INTO _patch_archive_pending (\"Id\") VALUES ({match.Id})");
         var relative = "archive-old/chunk-legacy";
         var directory = Path.Combine(settings.Directory, relative);
         Directory.CreateDirectory(directory);

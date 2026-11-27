@@ -498,9 +498,9 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
                 iv.PatchVersion
             });
 
-            entity.Property(iv => iv.BuildsFrom)
+            entity.PrimitiveCollection(iv => iv.BuildsFrom)
                 .HasDefaultValueSql("'{}'::integer[]");
-            entity.Property(iv => iv.BuildsInto)
+            entity.PrimitiveCollection(iv => iv.BuildsInto)
                 .HasDefaultValueSql("'{}'::integer[]");
             entity.Property(iv => iv.InStore)
                 .HasDefaultValue(true);
@@ -523,7 +523,7 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             entity.Property(cv => cv.Alias).HasMaxLength(64);
             entity.Property(cv => cv.Name).HasMaxLength(64);
             entity.Property(cv => cv.BalanceHash).HasMaxLength(64);
-            entity.Property(cv => cv.Roles)
+            entity.PrimitiveCollection(cv => cv.Roles)
                 .HasDefaultValueSql("'{}'::text[]");
 
             entity.HasOne(cv => cv.Patch)

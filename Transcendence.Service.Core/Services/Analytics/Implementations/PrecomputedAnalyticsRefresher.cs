@@ -165,7 +165,7 @@ public partial class PrecomputedAnalyticsRefresher : IPrecomputedAnalyticsRefres
             // Hangfire's job lock is not shared by every direct/operator caller. Serialize the
             // same patch before reading atoms so delete/insert publication cannot race itself.
             if (_context.Database.IsNpgsql())
-                await _context.Database.ExecuteSqlInterpolatedAsync(
+                await _context.Database.ExecuteSqlAsync(
                     $"SELECT pg_advisory_xact_lock(hashtextextended({"analytics-tabular:" + patch}, 0))", ct);
             result = await RefreshTabularCoreInsideTransactionAsync(patch, ct);
         }, ct);

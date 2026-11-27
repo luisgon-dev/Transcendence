@@ -1313,9 +1313,9 @@ All backend and test projects target `net11.0`, and API/worker containers use pi
 major SDKs are excluded. Hosting, authentication, Data Protection, and Extensions
 packages use 11.0.0.
 
-EF Core and `dotnet-ef` stay paired at stable 10.0.15 with Npgsql provider 10.0.3
-until the provider has a stable EF 11 release. This is compatible with the .NET 11
-application target. The local EF and Swagger tools explicitly allow runtime roll
+EF Core, `dotnet-ef`, the Npgsql driver and provider, and the SQLite/InMemory test
+providers are paired at stable 11.0.0. Upgrade these together to keep the runtime,
+migration tools and tests compatible. The local EF and Swagger tools explicitly allow runtime roll
 forward so they run on a machine with only .NET 11 installed; application runtime
 selection stays `net11.0`. Historical migrations must still be generated/changed
 only through EF CLI. A framework upgrade alone does not require a schema migration.

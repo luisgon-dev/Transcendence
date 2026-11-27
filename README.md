@@ -94,7 +94,7 @@ flowchart LR
 | [`Transcendence.WebAPI`](Transcendence.WebAPI) | ASP.NET Core REST API. It serves reads and only enqueues Hangfire jobs, never runs them. It holds **no Riot API key** and has no project reference to `Transcendence.Data`: controllers handle HTTP concerns and delegate to `Service.Core`. |
 | [`Transcendence.Service`](Transcendence.Service) | Worker host. Runs the Hangfire servers and recurring jobs, owns all Riot traffic, and is the **EF migrations assembly**: it applies migrations on startup (`Database:AutoMigrate`), or runs them alone with `Database:MigrateOnly=true`. |
 | [`Transcendence.Service.Core`](Transcendence.Service.Core) | Domain services shared by both hosts: ingestion, analytics compute, auth, live game, the Riot client (Camille), and job definitions. `AddTranscendenceCore` is shared; `AddTranscendenceWorkerCore` and `AddTranscendenceLeagueRiot` are registered by the worker only. |
-| [`Transcendence.Data`](Transcendence.Data) | EF Core 10 `DbContext` (Npgsql), entities, and repositories. |
+| [`Transcendence.Data`](Transcendence.Data) | EF Core 11 `DbContext` (Npgsql), entities, and repositories. |
 | [`apps/web`](apps/web) | Next.js 16 App Router frontend with BFF route handlers. Builds to `output: "standalone"`. |
 | [`packages/api-client`](packages/api-client) | `@transcendence/api-client`: types generated with `openapi-typescript` from the committed spec, wrapped with `openapi-fetch`. |
 | [`packages/web-routes`](packages/web-routes) | Maps a URL to its route template. The Web Vitals reporter, its collector, and the Lighthouse budgets share it so their metrics use the same labels. |

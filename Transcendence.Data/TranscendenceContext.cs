@@ -107,6 +107,12 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
         DbUpdateConcurrencyException exception,
         CancellationToken cancellationToken)
     {
+        // EF/Npgsql 11 also reports database serialization failures and deadlocks as
+        // concurrency exceptions. Only a row-version conflict can be merged here;
+        // database transaction failures must propagate to the owning operation.
+        if (exception.InnerException != null || exception.Entries.Count == 0)
+            return false;
+
         const string activityProperty = nameof(Summoner.LastActiveAtUtc);
         foreach (var entry in exception.Entries)
         {
@@ -498,9 +504,9 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
                 iv.PatchVersion
             });
 
-            entity.Property(iv => iv.BuildsFrom)
+            entity.PrimitiveCollection(iv => iv.BuildsFrom)
                 .HasDefaultValueSql("'{}'::integer[]");
-            entity.Property(iv => iv.BuildsInto)
+            entity.PrimitiveCollection(iv => iv.BuildsInto)
                 .HasDefaultValueSql("'{}'::integer[]");
             entity.Property(iv => iv.InStore)
                 .HasDefaultValue(true);
@@ -523,7 +529,7 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
             entity.Property(cv => cv.Alias).HasMaxLength(64);
             entity.Property(cv => cv.Name).HasMaxLength(64);
             entity.Property(cv => cv.BalanceHash).HasMaxLength(64);
-            entity.Property(cv => cv.Roles)
+            entity.PrimitiveCollection(cv => cv.Roles)
                 .HasDefaultValueSql("'{}'::text[]");
 
             entity.HasOne(cv => cv.Patch)

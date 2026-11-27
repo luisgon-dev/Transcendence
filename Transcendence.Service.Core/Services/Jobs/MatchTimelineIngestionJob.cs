@@ -84,7 +84,7 @@ public class MatchTimelineIngestionJob(
         // through to the normal update path — the later field writes become last-writer-wins UPDATEs
         // (benign) instead of a PK INSERT collision. The seeded columns are the non-nullable ones with
         // no DB default; their values match `new MatchTimelineFetchState{}` (Unfetched / 0 / 0).
-        await db.Database.ExecuteSqlInterpolatedAsync(
+        await db.Database.ExecuteSqlAsync(
             $"""
              INSERT INTO "MatchTimelineFetchStates" ("MatchId", "Status", "RetryCount", "SchemaVersion")
              VALUES ({match.Id}, 0, 0, 0)
@@ -178,7 +178,7 @@ public class MatchTimelineIngestionJob(
             await using var writeTx = await db.Database.BeginTransactionAsync(ct);
             if (db.Database.ProviderName?.Contains("Npgsql", StringComparison.Ordinal) == true)
             {
-                await db.Database.ExecuteSqlInterpolatedAsync(
+                await db.Database.ExecuteSqlAsync(
                     $"SELECT pg_advisory_xact_lock(hashtextextended({matchId}, 0))", ct);
             }
             if (await db.MatchArchiveEntries.AnyAsync(x => x.MatchId == match.Id, ct))

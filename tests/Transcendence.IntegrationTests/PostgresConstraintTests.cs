@@ -43,11 +43,11 @@ public sealed class PostgresConstraintTests(PostgresIntegrationFixture fixture)
     {
         await using var db = NewDb();
 
-        var nullSummonerPuuid = async () => await db.Database.ExecuteSqlInterpolatedAsync($"""
+        var nullSummonerPuuid = async () => await db.Database.ExecuteSqlAsync($"""
             INSERT INTO "Summoners" ("Id", "Puuid", "PlatformRegion", "Region")
             VALUES ({Guid.NewGuid()}, NULL, 'NA1', 'americas')
             """);
-        var nullMatchId = async () => await db.Database.ExecuteSqlInterpolatedAsync($"""
+        var nullMatchId = async () => await db.Database.ExecuteSqlAsync($"""
             INSERT INTO "Matches" ("Id", "MatchId", "MatchDate", "Duration", "QueueId", "Status", "RetryCount")
             VALUES ({Guid.NewGuid()}, NULL, 0, 0, 0, 0, 0)
             """);

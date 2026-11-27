@@ -369,7 +369,7 @@ public sealed class ChampionScopedSectionService(
             .SingleAsync(ct);
 
     private Task<int> InsertAsync(string feature, string key, string patch, string payload, DateTime at, CancellationToken ct) =>
-        db.Database.ExecuteSqlInterpolatedAsync($"""
+        db.Database.ExecuteSqlAsync($"""
             INSERT INTO "AnalyticsResponseSnapshots" ("Id", "Feature", "ScopeKey", "Patch", "Payload", "ComputedAtUtc")
             VALUES ({Guid.NewGuid()}, {feature}, {key}, {patch}, {payload}, {at})
             """, ct);

@@ -18,7 +18,7 @@ public class RefreshLockRepository(TranscendenceContext db, ILogger<RefreshLockR
         var rowId = Guid.NewGuid();
 
         // Acquire lock with an atomic upsert. We only update an existing row when its lease is expired.
-        var affectedRows = await db.Database.ExecuteSqlInterpolatedAsync($@"
+        var affectedRows = await db.Database.ExecuteSqlAsync($@"
             INSERT INTO ""RefreshLocks"" (""Id"", ""Key"", ""CreatedAtUtc"", ""LockedUntilUtc"")
             VALUES ({rowId}, {key}, {now}, {lockedUntil})
             ON CONFLICT (""Key"") DO UPDATE
@@ -76,7 +76,7 @@ public class RefreshLockRepository(TranscendenceContext db, ILogger<RefreshLockR
         // Same atomic upsert as TryAcquireAsync, but stamp (and rotate on re-acquire) a per-acquisition
         // owner token so ReleaseOwnedAsync can prove ownership and a stale holder can't free a lock that
         // has since been re-acquired.
-        var affectedRows = await db.Database.ExecuteSqlInterpolatedAsync($@"
+        var affectedRows = await db.Database.ExecuteSqlAsync($@"
             INSERT INTO ""RefreshLocks"" (""Id"", ""Key"", ""CreatedAtUtc"", ""LockedUntilUtc"", ""OwnerToken"")
             VALUES ({rowId}, {key}, {now}, {lockedUntil}, {ownerToken})
             ON CONFLICT (""Key"") DO UPDATE

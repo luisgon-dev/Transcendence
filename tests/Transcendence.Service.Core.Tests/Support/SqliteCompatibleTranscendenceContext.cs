@@ -13,13 +13,13 @@ internal sealed class SqliteCompatibleTranscendenceContext(DbContextOptions<Tran
 
         // PostgreSQL array default SQL is not valid in SQLite-backed tests.
         modelBuilder.Entity<ItemVersion>()
-            .Property(x => x.BuildsFrom)
+            .PrimitiveCollection(x => x.BuildsFrom)
             .HasDefaultValueSql("'[]'");
         modelBuilder.Entity<ItemVersion>()
-            .Property(x => x.BuildsInto)
+            .PrimitiveCollection(x => x.BuildsInto)
             .HasDefaultValueSql("'[]'");
         modelBuilder.Entity<ChampionVersion>()
-            .Property(x => x.Roles)
+            .PrimitiveCollection(x => x.Roles)
             .HasDefaultValueSql("'[]'");
     }
 }

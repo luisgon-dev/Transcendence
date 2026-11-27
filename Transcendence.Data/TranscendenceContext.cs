@@ -107,6 +107,12 @@ public class TranscendenceContext(DbContextOptions<TranscendenceContext> options
         DbUpdateConcurrencyException exception,
         CancellationToken cancellationToken)
     {
+        // EF/Npgsql 11 also reports database serialization failures and deadlocks as
+        // concurrency exceptions. Only a row-version conflict can be merged here;
+        // database transaction failures must propagate to the owning operation.
+        if (exception.InnerException != null || exception.Entries.Count == 0)
+            return false;
+
         const string activityProperty = nameof(Summoner.LastActiveAtUtc);
         foreach (var entry in exception.Entries)
         {
